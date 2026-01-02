@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const adminInstance = axios.create({
-  baseURL: "http://54.206.101.6:5000/api",
+  baseURL: "/api",
   timeout: 10000,
 });
 
