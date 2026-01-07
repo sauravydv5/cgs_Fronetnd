@@ -36,6 +36,9 @@ import Customers from "./pages/Customers";
 import NewBill from "./pages/NewBill";
 import BillDrafts from "./pages/BillDrafts";
 import SaleReturn from "./pages/SaleReturn";
+import RoleManagement from "./pages/Employee/RoleManagement";
+import AddEmployee from "./pages/Employee/AddEmployee";
+import Employees from "./pages/Employee/Employees";
 
 const queryClient = new QueryClient();
 
@@ -78,6 +81,11 @@ const App = () => (
           <Route path="/reports/hsn-wise" element={<HSN />} />
           <Route path="/reports/item-wise-sale-report" element={<ItemWiseSaleRegister />} />
           <Route path="/reports/sale-register" element={<SaleRegister />} />
+          <Route path="/roles" element={<RoleManagement />} />
+          <Route path="/employees/add" element={<AddEmployee />} />
+          <Route path="/employees" element={<Employees />} />
+
+
           <Route path="/settings" element={<Settings />} />
           <Route path="/settings/general-settings" element={<GeneralSettings />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}

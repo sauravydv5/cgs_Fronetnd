@@ -28,6 +28,10 @@ import {
 import { Check, ChevronsUpDown, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import newBillImg from "@/images/new-bill.png";
+import saleImg from "@/images/sale.png";
+import saleReturnImg from "@/images/sale-return.png";
+import draftsImg from "@/images/drafts.png";
 
 const mockProducts = [
   { itemCode: "0026", itemName: "Colorbar Nail paint", companyName: "Colorbar", hsnCode: "3304", mrp: "250" },
@@ -56,10 +60,10 @@ export default function BillGeneration() {
   const location = useLocation();
 
   const cards = [
-    { title: "New Bill", img: "src/images/new-bill.png", path: "/bills/customers" },
-    { title: "Sale", img: "src/images/sale.png", path: "/bills/sale" },
-    { title: "Sale Return", img: "src/images/sale-return.png", path: "/bills/sale-return" },
-    { title: "Drafts", img: "src/images/drafts.png", path: "/bills/drafts" },
+    { title: "New Bill", img: newBillImg, path: "/bills/customers" },
+    { title: "Sale", img: saleImg, path: "/bills/sale" },
+    { title: "Sale Return", img: saleReturnImg, path: "/bills/sale-return" },
+    { title: "Drafts", img: draftsImg, path: "/bills/drafts" },
   ];
 
   const [showModal, setShowModal] = useState(false);

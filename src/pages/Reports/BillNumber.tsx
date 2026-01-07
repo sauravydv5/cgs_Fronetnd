@@ -1,6 +1,6 @@
 "use client";
 import { AdminLayout } from "@/components/AdminLayout";
-import { getAllReports } from "@/adminApi/reportApi";
+import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Calendar, Search } from "lucide-react";
@@ -23,7 +23,12 @@ export default function BillNumber() {
     setError(null);
     setSearchResult(null);
     try {
-      const response = await getAllReports();
+      let response;
+      if (fromDate && toDate) {
+        response = await getReportsByDateRange(fromDate, toDate);
+      } else {
+        response = await getAllReports();
+      }
       if (response.success && Array.isArray(response.bills)) {
         const foundBill = response.bills.find(
           (bill: any) => bill.billNo?.toLowerCase().includes(billNumber.trim().toLowerCase())
@@ -31,7 +36,11 @@ export default function BillNumber() {
         if (foundBill) {
           setSearchResult(foundBill);
         } else {
-          setError(`Bill with number "${billNumber}" not found.`);
+          if (fromDate && toDate) {
+            setError(`Bill with number "${billNumber}" not found within the selected date range.`);
+          } else {
+            setError(`Bill with number "${billNumber}" not found.`);
+          }
         }
       } else {
         setError("Failed to fetch report data.");
@@ -54,11 +63,11 @@ export default function BillNumber() {
             <label className="text-sm text-gray-700 mb-1">From Date</label>
             <div className="relative">
               <Input
-                type="text"
-                placeholder="DD-MM-YY"
+                type="date"
                 className="w-40 h-10 rounded-md bg-[#F4F4F4] pl-8 border border-gray-200 text-gray-600 focus:ring-0"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
+                onKeyDown={(e) => e.preventDefault()}
               />
               <Calendar
                 className="absolute left-2.5 top-2.5 text-gray-500"
@@ -72,11 +81,11 @@ export default function BillNumber() {
             <label className="text-sm text-gray-700 mb-1">To Date</label>
             <div className="relative">
               <Input
-                type="text"
-                placeholder="DD-MM-YY"
+                type="date"
                 className="w-40 h-10 rounded-md bg-[#F4F4F4] pl-8 border border-gray-200 text-gray-600 focus:ring-0"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
+                onKeyDown={(e) => e.preventDefault()}
               />
               <Calendar
                 className="absolute left-2.5 top-2.5 text-gray-500"

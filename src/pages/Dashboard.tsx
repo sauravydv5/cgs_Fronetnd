@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { AdminLayout } from "@/components/AdminLayout";
 import { getDashboardData } from "@/adminApi/dashboardApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -16,6 +17,7 @@ import {
 } from "recharts";
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState([
     { label: "Total Sale", value: "Rs. 0", color: "bg-[#FFDCDC]" },
     { label: "Total Order", value: "0", color: "bg-[#EEDCFF]" },
@@ -125,7 +127,12 @@ export default function Dashboard() {
           {stats.map((item, index) => (
             <Card
               key={index}
-              className={`${item.color} border-0 shadow-md rounded-xl`}
+              className={`${item.color} border-0 shadow-md rounded-xl ${
+                item.label === "Low Stock" ? "cursor-pointer hover:opacity-80" : ""
+              }`}
+              onClick={() => {
+                if (item.label === "Low Stock") navigate("/inventory");
+              }}
             >
               <CardContent className="p-6 text-center">
                 <p className="text-sm font-medium text-gray-600">

@@ -388,6 +388,47 @@ export default function Sale() {
                 </div>
               </div>
 
+              {/* Order Items Section */}
+              <div className="bg-white rounded-lg border border-gray-200 mb-5 overflow-hidden">
+                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center">
+                    <Hash className="h-3.5 w-3.5 mr-1.5 text-gray-600" />
+                    Order Items
+                  </h3>
+                </div>
+                <div className="max-h-60 overflow-y-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-500 font-medium text-xs uppercase sticky top-0">
+                      <tr>
+                        <th className="px-4 py-2">Item Name</th>
+                        <th className="px-4 py-2 text-center">Qty</th>
+                        <th className="px-4 py-2 text-right">Rate</th>
+                        <th className="px-4 py-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {selectedBill.items && selectedBill.items.length > 0 ? (
+                        selectedBill.items.map((item: any, index: number) => (
+                          <tr key={index} className="hover:bg-gray-50/50">
+                            <td className="px-4 py-2">
+                              <p className="font-medium text-gray-800">{item.itemName || item.productName || "N/A"}</p>
+                              <p className="text-xs text-gray-500">{item.itemCode || ""}</p>
+                            </td>
+                            <td className="px-4 py-2 text-center">{item.qty}</td>
+                            <td className="px-4 py-2 text-right">₹{item.rate || item.mrp || 0}</td>
+                            <td className="px-4 py-2 text-right font-medium">₹{item.total || item.netAmount || 0}</td>
+                          </tr>
+                        ))
+                      ) : (
+                        <tr>
+                          <td colSpan={4} className="px-4 py-4 text-center text-gray-500">No items found</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
               {/* Tax & Discount Section */}
               <div className="bg-gray-50 rounded-lg p-4 mb-5 border border-gray-200">
                 <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center">
@@ -429,7 +470,11 @@ export default function Sale() {
                   </div>
                   <div className="flex justify-between items-center text-sm">
                     <p className="text-gray-500">You saved</p>
-                    <p className="font-bold text-green-600">₹ {selectedBill.discount}</p>
+                    <p className="font-bold text-green-600">₹ {(() => {
+                      const total = Number(selectedBill?.totalAmount) || 0;
+                      const after = Number(selectedBill?.amountAfterDiscount) || 0;
+                      return (total - after).toFixed(2);
+                    })()}</p>
                   </div>
                 </div>
               </div>

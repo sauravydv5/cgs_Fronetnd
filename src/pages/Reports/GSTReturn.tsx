@@ -1,6 +1,6 @@
 "use client";
 import { AdminLayout } from "@/components/AdminLayout";
-import { getAllReports } from "@/adminApi/reportApi";
+import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Download } from "lucide-react";
@@ -17,7 +17,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { format } from "date-fns";
+import { format, startOfMonth, endOfMonth } from "date-fns";
 
 export default function GSTReturn() {
   const [data, setData] = useState<any[]>([]);
@@ -50,7 +50,15 @@ export default function GSTReturn() {
       setLoading(true);
       setError(null);
       try {
-        const response = await getAllReports();
+        let response;
+        if (reportDate) {
+          const dateObj = new Date(reportDate);
+          const startDate = format(startOfMonth(dateObj), "yyyy-MM-dd");
+          const endDate = format(endOfMonth(dateObj), "yyyy-MM-dd");
+          response = await getReportsByDateRange(startDate, endDate);
+        } else {
+          response = await getAllReports();
+        }
         if (response.success && Array.isArray(response.bills)) {
           const billsData = response.bills;
 
@@ -145,6 +153,32 @@ export default function GSTReturn() {
     }
   };
 
+  const handleExport = () => {
+    if (!data || data.length === 0) return;
+
+    const csvContent = [
+      columns.map((col) => col.label).join(","),
+      ...data.map((row) =>
+        columns
+          .map((col) => {
+            const val = row[col.id];
+            const str = String(val ?? "");
+            return str.includes(",") ? `"${str}"` : str;
+          })
+          .join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `GST_Return_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <AdminLayout title="Report > GST Return">
       <div className="bg-white p-8 rounded-xl">
@@ -176,7 +210,11 @@ export default function GSTReturn() {
           </div>
 
           {/* Export Button */}
-          <Button className="flex items-center gap-2 bg-[#F46C6C] hover:bg-[#f35454] text-white text-sm px-6 py-5 h-[42px] rounded-full shadow-sm">
+          <Button
+            onClick={handleExport}
+            disabled={loading || data.length === 0}
+            className="flex items-center gap-2 bg-[#F46C6C] hover:bg-[#f35454] text-white text-sm px-6 py-5 h-[42px] rounded-full shadow-sm"
+          >
             Export <Download className="w-4 h-4" />
           </Button>
         </div>

@@ -11,6 +11,19 @@ export const addPurchaseReturn = async (returnData: any) => {
   }
 };
 
+// get purchase returns by date range
+export const getPurchaseReturnsByDateRange = async (startDate: string, endDate: string) => {
+  try {
+    const response = await adminInstance.get("/purchase-returns/date-range", {
+      params: { startDate, endDate },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching purchase returns by date range:", error);
+    throw error;
+  }
+};
+
 // delete a purchase return by id
 export const deletePurchaseReturn = async (id: string) => {
   try {

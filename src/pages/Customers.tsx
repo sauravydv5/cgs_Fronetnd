@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { DateRange } from "react-day-picker";
 import { AdminLayout } from "@/components/AdminLayout";
 import {
   getCustomers,
@@ -15,6 +14,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Search,
   MoreVertical,
@@ -23,6 +23,7 @@ import {
   Eye,
   Trash2,
   Ban,
+  CalendarDays,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -58,6 +59,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Tooltip,
@@ -89,7 +91,8 @@ export default function Customers() {
     dateOfBirth: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
   const itemsPerPage = 8;
 
@@ -165,7 +168,7 @@ export default function Customers() {
   }, []);
 
   const handleDateRangeFilter = useCallback(async () => {
-    if (!dateRange?.from || !dateRange?.to) {
+    if (!dateRange.start || !dateRange.end) {
       toast.warning("Please select both a start and end date.");
       return;
     }
@@ -173,9 +176,7 @@ export default function Customers() {
     try {
       setLoading(true);
       setCurrentPage(1);
-      const startDate = format(dateRange.from, "yyyy-MM-dd");
-      const endDate = format(dateRange.to, "yyyy-MM-dd");
-      const response = await getCustomersByDateRange(startDate, endDate);
+      const response = await getCustomersByDateRange(dateRange.start, dateRange.end);
 
       if (response.data && response.data.status) {
         const customersData = response.data.data.customers || [];
@@ -193,6 +194,7 @@ export default function Customers() {
           rawData: customer,
         }));
         setCustomers(formattedCustomers);
+        setDateFilterOpen(false);
       }
     } catch (error) {
       console.error("Failed to fetch customers for date range:", error);
@@ -381,52 +383,13 @@ export default function Customers() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <TooltipProvider>
-              <Tooltip>
-                <Popover>
-                  <TooltipTrigger asChild>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "rounded-full bg-[#fdebe3] text-gray-700 hover:bg-[#f9e5dc] text-sm sm:text-base border-none",
-                          !dateRange && "text-gray-600"
-                        )}
-                      >
-                        {dateRange?.from ? (
-                          dateRange.to ? (
-                            <>
-                              {format(dateRange.from, "LLL dd, y")} -{" "}
-                              {format(dateRange.to, "LLL dd, y")}
-                            </>
-                          ) : (
-                            format(dateRange.from, "LLL dd, y")
-                          )
-                        ) : (
-                          <span>Date Range ▼</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                  </TooltipTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      onSelect={handleDateChange}
-                      captionLayout="dropdown"
-                      initialFocus
-                      fromYear={new Date().getFullYear() - 100}
-                      toYear={new Date().getFullYear()}
-                      classNames={{
-                        dropdown: "max-h-40 overflow-y-auto", // year dropdown scrollable
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-                <TooltipContent>
-                  <p>Start Date - End Date</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <button 
+              onClick={() => setDateFilterOpen(true)}
+              title="Filter by Date Range"
+              className="focus:outline-none"
+            >
+              <CalendarDays className="w-6 h-6 text-[#f48c83] cursor-pointer hover:text-[#d16b62] transition-colors" />
+            </button>
 
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
@@ -563,7 +526,7 @@ export default function Customers() {
                 <th className="px-4 sm:px-6 py-3 font-medium">S.No</th>
                 <th className="px-4 sm:px-6 py-3 font-medium">Customer Name</th>
                 <th className="px-4 sm:px-6 py-3 font-medium">Phone Number</th>
-                <th className="px-4 sm:px-6 py-3 font-medium">Score Code</th>
+                {/* <th className="px-4 sm:px-6 py-3 font-medium">Score Code</th> */}
                 <th className="px-4 sm:px-6 py-3 font-medium">Status</th>
                 <th className="px-4 sm:px-6 py-3 font-medium text-center">
                   Action
@@ -583,14 +546,20 @@ export default function Customers() {
                     <tr
                       key={customer.id}
                       className="border-t hover:bg-gray-50 transition text-gray-800 cursor-pointer"
-                      onClick={() => navigate(`/bills/new-bill?customerId=${customer.id}`, { state: { openAddProductModal: true, customerName: customer.name, customerCode: customer.sno } })}
+                      onClick={() => {
+                        if (customer.status === "Blocked") {
+                          toast.error("This customer is blocked. Please unblock to generate a bill.");
+                          return;
+                        }
+                        navigate(`/bills/new-bill?customerId=${customer.id}`, { state: { openAddProductModal: true, customerName: customer.name, customerCode: customer.sno } });
+                      }}
                     >
                       <td className="px-4 sm:px-6 py-3">{customer.sno}</td>
                       <td className="px-4 sm:px-6 py-3">{customer.name}</td>
                       <td className="px-4 sm:px-6 py-3">{customer.phone}</td>
-                      <td className="px-4 sm:px-6 py-3">
+                      {/* <td className="px-4 sm:px-6 py-3">
                         {customer.scoreCode}
-                      </td>
+                      </td> */}
                       <td className="px-4 sm:px-6 py-3">
                         <span
                           className={`font-medium ${
@@ -615,7 +584,13 @@ export default function Customers() {
                                   size="icon"
                                   variant="ghost"
                                   className="w-8 h-8 rounded-full border border-gray-300 hover:bg-gray-100"
-                                  onClick={() => navigate(`/bills/new-bill?customerId=${customer.id}`, { state: { customerName: customer.name, customerCode: customer.sno } })}
+                                  onClick={() => {
+                                    if (customer.status === "Blocked") {
+                                      toast.error("This customer is blocked. Please unblock to view bills.");
+                                      return;
+                                    }
+                                    navigate(`/bills/new-bill?customerId=${customer.id}`, { state: { customerName: customer.name, customerCode: customer.sno } });
+                                  }}
                                 >
                                   <Eye className="w-4 h-4 text-gray-600" />
                                 </Button>
@@ -719,6 +694,51 @@ export default function Customers() {
             </>
           )}
         </div>
+
+        {/* Date Range Filter Dialog */}
+        <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+          <DialogContent className="w-full max-w-md">
+            <DialogHeader>
+              <DialogTitle>Filter Customers by Date</DialogTitle>
+              <DialogDescription>
+                Select a start and end date to view customers registered within that range.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  onKeyDown={(e) => e.preventDefault()}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="endDate">End Date</Label>
+                <Input
+                  id="endDate"
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                  onKeyDown={(e) => e.preventDefault()}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                className="bg-[#E98C81] hover:bg-[#f7857b]"
+                onClick={handleDateRangeFilter}
+              >
+                Apply Filter
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );

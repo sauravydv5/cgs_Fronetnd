@@ -77,9 +77,30 @@ export default function InventoryTracking() {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      const res = await getAllProducts();
-      const productData = res?.data?.data?.rows || [];
-      setProducts(Array.isArray(productData) ? productData.map(p => ({...p, stock: p.stock ?? 0})) : []);
+      // @ts-ignore
+      const res = await getAllProducts({ limit: 10000 });
+      
+      let productData = [];
+      
+      // Robust response parsing similar to ProductManagement
+      if (res.data?.data?.rows && Array.isArray(res.data.data.rows)) {
+        productData = res.data.data.rows;
+      } else if (res.data?.data?.products && Array.isArray(res.data.data.products)) {
+        productData = res.data.data.products;
+      } else if (res.data?.rows && Array.isArray(res.data.rows)) {
+        productData = res.data.rows;
+      } else if (res.data?.products && Array.isArray(res.data.products)) {
+        productData = res.data.products;
+      } else if (res.data?.data && Array.isArray(res.data.data)) {
+        productData = res.data.data;
+      } else if (Array.isArray(res.data)) {
+        productData = res.data;
+      } else if (res.data?.items && Array.isArray(res.data.items)) {
+        productData = res.data.items;
+      }
+
+      const mappedProducts = Array.isArray(productData) ? productData.map(p => ({...p, stock: p.stock ?? 0})) : [];
+      setProducts(mappedProducts);
     } catch (err) {
       console.error("Fetch error:", err);
       setProducts([]);

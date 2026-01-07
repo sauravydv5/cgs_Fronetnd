@@ -23,7 +23,16 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { addSupplier, getAllSuppliers, updateSupplier, deleteSupplier } from "@/adminApi/supplierApi";
+import { addSupplier, getAllSuppliers, updateSupplier, deleteSupplier, getSuppliersByDateRange } from "@/adminApi/supplierApi";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 export default function PurchasersDetail() {
   const [suppliers, setSuppliers] = useState([]);
@@ -57,6 +66,8 @@ export default function PurchasersDetail() {
     purchases: "",
     returns: "",
   });
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
   const [columns, setColumns] = useState(() => {
     const savedOrder = localStorage.getItem("purchasersDetailColumnOrder");
@@ -258,6 +269,30 @@ export default function PurchasersDetail() {
     }
   };
 
+  const handleDateRangeSearch = async () => {
+    if (!dateRange.start || !dateRange.end) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await getSuppliersByDateRange(dateRange.start, dateRange.end);
+      if (response.status || response.success) {
+        setSuppliers(response.data || response.suppliers || []);
+        setDateFilterOpen(false);
+        toast.success("Suppliers filtered by date range");
+      } else {
+        toast.error(response.message || "Failed to fetch suppliers");
+      }
+    } catch (error: any) {
+      console.error("Failed to fetch suppliers by date:", error);
+      toast.error(error.response?.data?.message || "Failed to fetch suppliers");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const filteredSuppliers = suppliers.filter(supplier => {
     const query = searchQuery.toLowerCase();
     if (!query) return true;
@@ -287,6 +322,7 @@ export default function PurchasersDetail() {
             <Button
               variant="outline"
               className="rounded-full px-3 py-2 border-gray-300 hover:bg-gray-100"
+              onClick={() => setDateFilterOpen(true)}
             >
               <Calendar size={18} className="text-gray-600" />
             </Button>
@@ -548,6 +584,51 @@ export default function PurchasersDetail() {
     </div>
   </div>
 )}
+
+      {/* Date Range Filter Dialog */}
+      <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+        <DialogContent className="w-full max-w-md">
+          <DialogHeader>
+            <DialogTitle>Filter Suppliers by Date</DialogTitle>
+            <DialogDescription>
+              Select a start and end date to view suppliers within that range.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="endDate">End Date</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-[#E98C81] hover:bg-[#f48c83]"
+              onClick={handleDateRangeSearch}
+            >
+              Apply Filter
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

@@ -47,7 +47,7 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
             {/* Right Section - Notification + Profile */}
             <div className="flex items-center gap-4">
               {/* Notification Bell */}
-              <div className="relative">
+              {/* <div className="relative">
                 <Button
                   variant="outline"
                   size="icon"
@@ -55,9 +55,8 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
                 >
                   <Bell className="w-5 h-5 text-gray-700" />
                 </Button>
-                {/* Blue dot indicator */}
                 <span className="absolute top-2 right-2 block h-2 w-2 rounded-full bg-blue-500"></span>
-              </div>
+              </div> */}
 
               {/* Profile Dropdown */}
               <DropdownMenu>

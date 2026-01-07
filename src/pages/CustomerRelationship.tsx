@@ -1,6 +1,5 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
-import { DateRange } from "react-day-picker";
 import { AdminLayout } from "@/components/AdminLayout";
 import {
   getCustomers,
@@ -14,11 +13,13 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Search,
   MoreVertical,
   X,
   Calendar as CalendarIcon,
+  CalendarDays,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -54,6 +55,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Tooltip,
@@ -85,7 +87,8 @@ export default function CustomerRelationship() {
     dateOfBirth: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [dateRange, setDateRange] = useState<DateRange | undefined>();
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
   const itemsPerPage = 8;
 
@@ -108,7 +111,7 @@ export default function CustomerRelationship() {
           maritalStatus: customer.maritalStatus || "N/A",
           anniversary: customer.anniversary || "N/A",
           gender: customer.gender || "N/A",
-          scoreCode: "N/A",
+          scoreCode: customer.scoreCode || "N/A",
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
@@ -146,7 +149,7 @@ export default function CustomerRelationship() {
           maritalStatus: customer.maritalStatus || "N/A",
           anniversary: customer.anniversary || "N/A",
           gender: customer.gender || "N/A",
-          scoreCode: "SC-102",
+          scoreCode: customer.scoreCode || "N/A",
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
@@ -161,7 +164,7 @@ export default function CustomerRelationship() {
   }, []);
 
   const handleDateRangeFilter = useCallback(async () => {
-    if (!dateRange?.from || !dateRange?.to) {
+    if (!dateRange.start || !dateRange.end) {
       toast.warning("Please select both a start and end date.");
       return;
     }
@@ -169,9 +172,7 @@ export default function CustomerRelationship() {
     try {
       setLoading(true);
       setCurrentPage(1);
-      const startDate = format(dateRange.from, "yyyy-MM-dd");
-      const endDate = format(dateRange.to, "yyyy-MM-dd");
-      const response = await getCustomersByDateRange(startDate, endDate);
+      const response = await getCustomersByDateRange(dateRange.start, dateRange.end);
 
       if (response.data && response.data.status) {
         const customersData = response.data.data.customers || [];
@@ -185,10 +186,12 @@ export default function CustomerRelationship() {
               : "N/A",
           phone: customer.phoneNumber,
           email: customer.email,
+          scoreCode: customer.scoreCode || "N/A",
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
         setCustomers(formattedCustomers);
+        setDateFilterOpen(false);
       }
     } catch (error) {
       console.error("Failed to fetch customers for date range:", error);
@@ -284,13 +287,20 @@ export default function CustomerRelationship() {
 
     setIsSubmitting(true);
     try {
+      // Format date from YYYY-MM-DD to DD/MM/YYYY
+      let formattedDob = newCustomer.dateOfBirth;
+      if (formattedDob && formattedDob.includes("-")) {
+        const [year, month, day] = formattedDob.split("-");
+        formattedDob = `${day}/${month}/${year}`;
+      }
+
       // Construct the payload exactly as required by the API
       const payload: any = {
         firstName: newCustomer.firstName,
         lastName: newCustomer.lastName,
         email: newCustomer.email,
         phoneNumber: newCustomer.phoneNumber,
-        dateOfBirth: newCustomer.dateOfBirth, // Matching payload key
+        dateOfBirth: formattedDob, // Matching payload key
         password: "SecurePass123", // Using default password as per payload example, consider making this dynamic or more secure
         profilePic: "https://example.com/profile.jpg", // Using default profile pic as per payload example, consider making this dynamic
       };
@@ -316,13 +326,6 @@ export default function CustomerRelationship() {
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const handleDateChange = (date) => {
-    setNewCustomer((prev) => ({
-      ...prev,
-      dateOfBirth: format(date, "dd/MM/yyyy"),
-    }));
   };
 
   const handleSelectChange = (name) => (value) => {
@@ -380,52 +383,13 @@ export default function CustomerRelationship() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <TooltipProvider>
-              <Tooltip>
-                <Popover>
-                  <TooltipTrigger asChild>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "rounded-full bg-[#fdebe3] text-gray-700 hover:bg-[#f9e5dc] text-sm sm:text-base border-none",
-                          !dateRange && "text-gray-600"
-                        )}
-                      >
-                        {dateRange?.from ? (
-                          dateRange.to ? (
-                            <>
-                              {format(dateRange.from, "LLL dd, y")} -{" "}
-                              {format(dateRange.to, "LLL dd, y")}
-                            </>
-                          ) : (
-                            format(dateRange.from, "LLL dd, y")
-                          )
-                        ) : (
-                          <span>Date Range ▼</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                  </TooltipTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                      mode="single"
-                      onSelect={handleDateChange}
-                      captionLayout="dropdown"
-                      initialFocus
-                      fromYear={new Date().getFullYear() - 100}
-                      toYear={new Date().getFullYear()}
-                      classNames={{
-                        dropdown: "max-h-40 overflow-y-auto", // year dropdown scrollable
-                      }}
-                    />
-                  </PopoverContent>
-                </Popover>
-                <TooltipContent>
-                  <p>Start Date - End Date</p>
-                </TooltipContent>
-              </Tooltip>
-            </TooltipProvider>
+            <button 
+              onClick={() => setDateFilterOpen(true)}
+              title="Filter by Date Range"
+              className="focus:outline-none"
+            >
+              <CalendarDays className="w-6 h-6 text-[#f48c83] cursor-pointer hover:text-[#d16b62] transition-colors" />
+            </button>
 
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 w-4 h-4" />
@@ -498,32 +462,14 @@ export default function CustomerRelationship() {
                     <div className="relative">
                       <Input
                         name="dateOfBirth"
-                        type="text"
+                        type="date"
                         value={newCustomer.dateOfBirth}
-                        readOnly
-                        placeholder="DD/MM/YYYY"
-                        className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400 pr-10 cursor-pointer"
+                        onChange={handleInputChange}
+                        onKeyDown={(e) => e.preventDefault()}
+                        onClick={(e) => e.currentTarget.showPicker()}
+                        className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400 cursor-pointer pr-10"
                       />
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            className="absolute right-1 top-1/2 -translate-y-1/2 h-9 w-9 p-0 hover:bg-gray-200"
-                          >
-                            <CalendarIcon className="h-4 w-4 text-gray-500" />
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            mode="single"
-                            onSelect={handleDateChange}
-                            initialFocus
-                            captionLayout="dropdown-buttons"
-                            fromYear={new Date().getFullYear() - 100}
-                            toYear={new Date().getFullYear()}
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <CalendarIcon className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
                     </div>
                     <Button
                       onClick={handleAddCustomer}
@@ -820,6 +766,53 @@ export default function CustomerRelationship() {
                 </div>
               </div>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Date Range Filter Dialog */}
+        <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+          <DialogContent className="w-full max-w-md">
+            <DialogHeader>
+              <DialogTitle>Filter Customers by Date</DialogTitle>
+              <DialogDescription>
+                Select a start and end date to view customers registered within that range.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  onKeyDown={(e) => e.preventDefault()}
+                  onClick={(e) => e.currentTarget.showPicker()}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="endDate">End Date</Label>
+                <Input
+                  id="endDate"
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                  onKeyDown={(e) => e.preventDefault()}
+                  onClick={(e) => e.currentTarget.showPicker()}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
+                Cancel
+              </Button>
+              <Button 
+                className="bg-[#E98C81] hover:bg-[#f48c83]"
+                onClick={handleDateRangeFilter}
+              >
+                Apply Filter
+              </Button>
+            </DialogFooter>
           </DialogContent>
         </Dialog>
       </div>

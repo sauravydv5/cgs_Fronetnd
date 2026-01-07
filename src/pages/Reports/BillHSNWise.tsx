@@ -1,8 +1,18 @@
 import { AdminLayout } from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
-import { Download, Search } from "lucide-react";
+import { Download, Search, Calendar } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
-import { getAllReports } from "@/adminApi/reportApi";
+import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import {
   DndContext,
@@ -17,13 +27,39 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+// ---------------- Types ----------------
+type BillItem = {
+  id?: string;
+  billDate: string;
+  billNumber: string;
+  itemName: string;
+  hsnCode?: string;
+  gstPercent?: number;
+  sgst?: number;
+  cgst?: number;
+  qty: number;
+  total: number;
+  taxableAmount: number;
+};
+
+type SummaryType = {
+  totalItems: number;
+  totalQty: number;
+  totalAmount: number;
+  totalTaxableAmount: number;
+  totalCgst: number;
+  totalSgst: number;
+};
+
 export default function BillHSNWise() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedHSN, setSelectedHSN] = useState("All HSN Code");
-  const [billData, setBillData] = useState<any[]>([]);
-  const [summary, setSummary] = useState<any>(null);
+  const [billData, setBillData] = useState<BillItem[]>([]);
+  const [summary, setSummary] = useState<SummaryType | null>(null);
   const [loading, setLoading] = useState(false);
   const [hsnCodes, setHsnCodes] = useState<string[]>([]);
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
   const initialColumns = [
     { id: "sno", label: "SNO." },
@@ -44,42 +80,64 @@ export default function BillHSNWise() {
     return savedOrder ? JSON.parse(savedOrder) : initialColumns;
   });
 
+  // ---------------- Fetch & Calculate ----------------
   const fetchReportData = useCallback(async () => {
     setLoading(true);
     setBillData([]);
     setSummary(null);
     try {
-      const response = await getAllReports();
+      let response;
+      if (dateRange.start && dateRange.end) {
+        response = await getReportsByDateRange(dateRange.start, dateRange.end);
+      } else {
+        response = await getAllReports();
+      }
+
       if (response.success && Array.isArray(response.bills)) {
-        const flattenedItems = response.bills.flatMap((bill: any) =>
-          (bill.items || []).map((item: any) => ({
-            ...item,
-            billDate: bill.billDate,
-            billNumber: bill.billNo,
-          }))
+        // Flatten items and calculate totals
+        const flattenedItems: BillItem[] = response.bills.flatMap((bill: any) =>
+          (bill.items || []).map((item: any) => {
+            const qty = Number(item.qty || 0);
+            const taxableAmount = Number(item.taxableAmount || 0);
+            const sgst = Number(item.sgst || 0);
+            const cgst = Number(item.cgst || 0);
+            const total = taxableAmount + sgst + cgst + (Number(bill.roundOff) || 0);
+            return {
+              ...item,
+              billDate: bill.billDate,
+              billNumber: bill.billNo,
+              qty,
+              taxableAmount,
+              sgst,
+              cgst,
+              total,
+            };
+          })
         );
 
-        // Filter data based on search term and selected HSN
-        const filteredData = flattenedItems.filter((item: any) => {
+        // Filter by HSN & Search
+        const filteredData = flattenedItems.filter((item) => {
           const hsnMatch = selectedHSN === "All HSN Code" || item.hsnCode === selectedHSN;
-          const searchMatch = !searchTerm || 
-            (item.hsnCode && item.hsnCode.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (item.billNumber && item.billNumber.toLowerCase().includes(searchTerm.toLowerCase())) ||
-            (item.itemName && item.itemName.toLowerCase().includes(searchTerm.toLowerCase()));
+          const searchMatch =
+            !searchTerm ||
+            item.hsnCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.billNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            item.itemName?.toLowerCase().includes(searchTerm.toLowerCase());
           return hsnMatch && searchMatch;
         });
 
         setBillData(filteredData);
-// @ts-ignore
-        const uniqueHsnCodes: string[] = [...new Set(flattenedItems.map((item: any) => item.hsnCode).filter(Boolean))];
-        setHsnCodes(uniqueHsnCodes);
 
-        // Calculate summary from the filtered data
-        const totalQty = filteredData.reduce((sum: number, item: any) => sum + (item.qty || 0), 0);
-        const totalTaxableAmount = filteredData.reduce((sum: number, item: any) => sum + (item.taxableAmount || 0), 0);
-        const totalSgst = filteredData.reduce((sum: number, item: any) => sum + (item.sgst || 0), 0);
-        const totalCgst = filteredData.reduce((sum: number, item: any) => sum + (item.cgst || 0), 0);
-        const totalAmount = filteredData.reduce((sum: number, item: any) => sum + (item.total || 0), 0);
+        // Set HSN codes for dropdown
+        const uniqueHsnCodes = [...new Set(flattenedItems.map((item) => item.hsnCode).filter(Boolean))];
+        setHsnCodes(uniqueHsnCodes as string[]);
+
+        // Calculate summary
+        const totalQty = filteredData.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+        const totalTaxableAmount = filteredData.reduce((sum, item) => sum + Number(item.taxableAmount || 0), 0);
+        const totalSgst = filteredData.reduce((sum, item) => sum + Number(item.sgst || 0), 0);
+        const totalCgst = filteredData.reduce((sum, item) => sum + Number(item.cgst || 0), 0);
+        const totalAmount = filteredData.reduce((sum, item) => sum + Number(item.total || 0), 0);
 
         setSummary({
           totalItems: filteredData.length,
@@ -89,7 +147,6 @@ export default function BillHSNWise() {
           totalCgst,
           totalSgst,
         });
-
       } else {
         toast.error("Failed to fetch report data.");
       }
@@ -99,7 +156,16 @@ export default function BillHSNWise() {
     } finally {
       setLoading(false);
     }
-  }, [searchTerm, selectedHSN]);
+  }, [searchTerm, selectedHSN, dateRange]);
+
+  const handleDateRangeApply = () => {
+    if (!dateRange.start || !dateRange.end) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+    setDateFilterOpen(false);
+    fetchReportData();
+  };
 
   useEffect(() => {
     localStorage.setItem("billHSNWiseColumnOrder", JSON.stringify(columns));
@@ -109,14 +175,36 @@ export default function BillHSNWise() {
     fetchReportData();
   }, [fetchReportData]);
 
-  const SortableHeader = ({ column }: { column: { id: string; label: string } }) => {
-    const { attributes, listeners, setNodeRef, transform, transition } =
-      useSortable({ id: column.id });
-    const style = {
-      transform: CSS.Transform.toString(transform),
-      transition,
-    };
+  // ---------------- CSV Export ----------------
+  const handleExport = () => {
+    if (!billData.length) return;
+    const csvContent = [
+      columns.map((c) => c.label).join(","),
+      ...billData.map((row) =>
+        columns
+          .map((col) => {
+            let val: any = row[col.id as keyof BillItem] ?? "";
+            if (typeof val === "number") val = val.toFixed(2);
+            return String(val).includes(",") ? `"${val}"` : val;
+          })
+          .join(",")
+      ),
+    ].join("\n");
 
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Bill_HSN_Wise_${new Date().toISOString().split("T")[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // ---------------- Sortable Header ----------------
+  const SortableHeader = ({ column }: { column: { id: string; label: string } }) => {
+    const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: column.id });
+    const style = { transform: CSS.Transform.toString(transform), transition };
     return (
       <th
         ref={setNodeRef}
@@ -130,13 +218,30 @@ export default function BillHSNWise() {
     );
   };
 
+  // ---------------- Render ----------------
+  const renderCell = (row: BillItem & { sno: number }, columnId: string) => {
+    switch (columnId) {
+      case "sno": return <td className="px-4 py-4 text-sm text-gray-700">{row.sno}</td>;
+      case "billDate": return <td className="px-4 py-4 text-sm text-gray-700">{new Date(row.billDate).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric'})}</td>;
+      case "billNumber": return <td className="px-4 py-4 text-sm text-gray-700">{row.billNumber}</td>;
+      case "itemName": return <td className="px-4 py-4 text-sm text-gray-700">{row.itemName}</td>;
+      case "hsnCode": return <td className="px-4 py-4 text-sm text-gray-700">{row.hsnCode || "N/A"}</td>;
+      case "gstRate": return <td className="px-4 py-4 text-sm text-gray-700">{row.gstPercent ? `${row.gstPercent}%` : "N/A"}</td>;
+      case "sgst": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.sgst.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}</td>;
+      case "cgst": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.cgst.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}</td>;
+      case "qty": return <td className="px-4 py-4 text-sm text-gray-700">{row.qty}</td>;
+      case "totalAmt": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.total.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}</td>;
+      case "taxableAmt": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}</td>;
+      default: return null;
+    }
+  };
+
   return (
     <AdminLayout title="Reports > Bill HSN Wise">
       <div className="bg-white-50 min-h-screen">
-        {/* Header Section */}
+        {/* Header */}
         <div className="bg-white p-6 border-b border-gray-200">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            {/* Search Section */}
             <div className="flex w-full md:w-1/2 items-center gap-2">
               <input
                 type="text"
@@ -150,72 +255,46 @@ export default function BillHSNWise() {
               </Button>
             </div>
 
-            {/* HSN Code Dropdown */}
             <select
               className="px-4 py-2.5 border border-gray-300 rounded-lg bg-[#EBEBEB] text-sm focus:outline-none focus:ring-2 focus:ring-gray-200"
               value={selectedHSN}
               onChange={(e) => setSelectedHSN(e.target.value)}
             >
               <option>All HSN Code</option>
-              <option>3304</option>
-              {hsnCodes && hsnCodes.map((code: string) => (
+              {hsnCodes.map((code) => (
                 <option key={code} value={code}>{code}</option>
               ))}
             </select>
 
-            {/* Export Button */}
-            <Button className="w-[239px] h-[50px] bg-[#E98C81] hover:bg-[#d87a6f] text-white rounded-full flex items-center justify-center gap-2 shadow-md">
+            <Button variant="outline" className="rounded-full border border-gray-300 bg-[#EBEBEB] text-gray-700 hover:bg-gray-200 flex items-center gap-2" onClick={() => setDateFilterOpen(true)}>
+              <Calendar size={16} />
+            </Button>
+
+            <Button onClick={handleExport} disabled={loading || billData.length === 0} className="w-[239px] h-[50px] bg-[#E98C81] hover:bg-[#d87a6f] text-white rounded-full flex items-center justify-center gap-2 shadow-md">
               Export <Download className="w-4 h-4" />
             </Button>
           </div>
         </div>
 
-        {/* Table Section */}
+        {/* Table */}
         <div className="p-6">
           <div className="overflow-x-auto bg-white rounded-lg border border-gray-200">
-            {(() => {
-              const handleDragEnd = (event: DragEndEvent) => {
-                const { active, over } = event;
-                if (over && active.id !== over.id) {
-                  setColumns((items) => {
-                    const oldIndex = items.findIndex((item) => item.id === active.id);
-                    const newIndex = items.findIndex((item) => item.id === over.id);
-                    return arrayMove(items, oldIndex, newIndex);
-                  });
-                }
-              };
-
-              const columnIds = columns.map((c) => c.id);
-
-              const renderCell = (row: any, columnId: string) => {
-                switch (columnId) {
-                  case "sno": return <td className="px-4 py-4 text-sm text-gray-700">{row.sno}</td>;
-                  case "billDate": return <td className="px-4 py-4 text-sm text-gray-700">{new Date(row.billDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>;
-                  case "billNumber": return <td className="px-4 py-4 text-sm text-gray-700">{row.billNumber}</td>;
-                  case "itemName": return <td className="px-4 py-4 text-sm text-gray-700">{row.itemName}</td>;
-                  case "hsnCode": return <td className="px-4 py-4 text-sm text-gray-700">{row.hsnCode || 'N/A'}</td>;
-                  case "gstRate": return <td className="px-4 py-4 text-sm text-gray-700">{row.gstPercent ? `${row.gstPercent}%` : 'N/A'}</td>;
-                  case "sgst": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.sgst?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
-                  case "cgst": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.cgst?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
-                  case "qty": return <td className="px-4 py-4 text-sm text-gray-700">{row.qty}</td>;
-                  case "totalAmt": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.total?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
-                  case "taxableAmt": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.taxableAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
-                  default: return null;
-                }
-              };
-
-              return (
+            <DndContext collisionDetection={closestCenter} onDragEnd={(event) => {
+              const { active, over } = event;
+              if (over && active.id !== over.id) {
+                setColumns((items) => {
+                  const oldIndex = items.findIndex((item) => item.id === active.id);
+                  const newIndex = items.findIndex((item) => item.id === over.id);
+                  return arrayMove(items, oldIndex, newIndex);
+                });
+              }
+            }}>
+              <SortableContext items={columns.map(c => c.id)} strategy={horizontalListSortingStrategy}>
                 <table className="w-full">
                   <thead className="bg-white border-b-2 border-gray-200">
-                    <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-                      <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
-                        <tr>
-                          {columns.map((column) => (
-                            <SortableHeader key={column.id} column={column} />
-                          ))}
-                        </tr>
-                      </SortableContext>
-                    </DndContext>
+                    <tr>
+                      {columns.map((col) => <SortableHeader key={col.id} column={col} />)}
+                    </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-100">
                     {loading ? (
@@ -225,23 +304,51 @@ export default function BillHSNWise() {
                     ) : billData.length > 0 ? (
                       <>
                         {billData.map((row, index) => (
-                          <tr
-                            key={row.id || index}
-                            className="hover:bg-gray-50 transition-colors"
-                          >
+                          <tr key={row.id || index} className="hover:bg-gray-50 transition-colors">
                             {columns.map((col) => renderCell({ ...row, sno: index + 1 }, col.id))}
                           </tr>
                         ))}
-                        {/* Total Row */}
                         {summary && (
                           <tr className="bg-gray-100 font-semibold border-t-2 border-gray-200">
-                            <td className="px-4 py-4 text-sm text-gray-900" colSpan={6}>TOTAL</td>
-                            <td className="px-4 py-4 text-sm text-gray-900">-</td>
-                            <td className="px-4 py-4 text-sm text-gray-900">₹{summary.totalSgst?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td className="px-4 py-4 text-sm text-gray-900">₹{summary.totalCgst?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td className="px-4 py-4 text-sm text-gray-900">{summary.totalQty}</td>
-                            <td className="px-4 py-4 text-sm text-gray-900">₹{summary.totalAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                            <td className="px-4 py-4 text-sm text-gray-900">₹{summary.totalTaxableAmount?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                            {columns.map((col, index) => {
+                              if (index === 0) {
+                                return (
+                                  <td key={col.id} className="px-4 py-4 text-sm text-gray-900">
+                                    TOTAL
+                                  </td>
+                                );
+                              }
+                              switch (col.id) {
+                                case "sgst":
+                                  return (
+                                    <td key={col.id} className="px-4 py-4 text-sm text-gray-900">
+                                      ₹{summary.totalSgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  );
+                                case "cgst":
+                                  return (
+                                    <td key={col.id} className="px-4 py-4 text-sm text-gray-900">
+                                      ₹{summary.totalCgst.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  );
+                                case "qty":
+                                  return <td key={col.id} className="px-4 py-4 text-sm text-gray-900">{summary.totalQty}</td>;
+                                case "totalAmt":
+                                  return (
+                                    <td key={col.id} className="px-4 py-4 text-sm text-gray-900">
+                                      ₹{summary.totalAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  );
+                                case "taxableAmt":
+                                  return (
+                                    <td key={col.id} className="px-4 py-4 text-sm text-gray-900">
+                                      ₹{summary.totalTaxableAmount.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                  );
+                                default:
+                                  return <td key={col.id} className="px-4 py-4 text-sm text-gray-900"></td>;
+                              }
+                            })}
                           </tr>
                         )}
                       </>
@@ -252,8 +359,8 @@ export default function BillHSNWise() {
                     )}
                   </tbody>
                 </table>
-              );
-            })()}
+              </SortableContext>
+            </DndContext>
           </div>
 
           {/* Summary Cards */}
@@ -264,21 +371,58 @@ export default function BillHSNWise() {
               { label: "Total Amount", value: `₹ ${summary?.totalAmount?.toLocaleString('en-IN') || 0}`, color: "green" },
               { label: "Total CGST", value: `₹ ${summary?.totalCgst?.toLocaleString('en-IN') || 0}`, color: "orange" },
               { label: "Total SGST", value: `₹ ${summary?.totalSgst?.toLocaleString('en-IN') || 0}`, color: "pink" },
-            ].map((card, index) => (
+            ].map((card) => (
               <div
                 key={card.label}
-                className={`bg-${card.color}-50 border border-${card.color}-200 rounded-xl p-5 text-center`}
+                className={`rounded-xl p-5 text-center border 
+                  ${card.color === 'blue' ? 'bg-blue-50 border-blue-200' : ''}
+                  ${card.color === 'purple' ? 'bg-purple-50 border-purple-200' : ''}
+                  ${card.color === 'green' ? 'bg-green-50 border-green-200' : ''}
+                  ${card.color === 'orange' ? 'bg-orange-50 border-orange-200' : ''}
+                  ${card.color === 'pink' ? 'bg-pink-50 border-pink-200' : ''}`}
               >
-                <div className="text-sm text-gray-600 mb-2 font-medium">
-                  {card.label}
-                </div>
-                <div className="text-3xl font-bold text-gray-800">
-                  {card.value}
-                </div>
+                <div className="text-sm text-gray-600 mb-2 font-medium">{card.label}</div>
+                <div className="text-3xl font-bold text-gray-800">{card.value}</div>
               </div>
             ))}
           </div>
         </div>
+
+        {/* Date Filter Dialog */}
+        <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+          <DialogContent className="w-full max-w-md">
+            <DialogHeader>
+              <DialogTitle>Filter by Date</DialogTitle>
+              <DialogDescription>Select a start and end date to view reports within that range.</DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <Label htmlFor="startDate">Start Date</Label>
+                <Input
+                  id="startDate"
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  onKeyDown={(e) => e.preventDefault()}
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="endDate">End Date</Label>
+                <Input
+                  id="endDate"
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                  onKeyDown={(e) => e.preventDefault()}
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setDateFilterOpen(false)}>Cancel</Button>
+              <Button className="bg-[#E98C81] hover:bg-[#f48c83]" onClick={handleDateRangeApply}>Apply Filter</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </div>
     </AdminLayout>
   );

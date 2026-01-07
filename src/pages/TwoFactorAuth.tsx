@@ -17,6 +17,20 @@ export default function TwoFactorAuth() {
   const [otp, setOtp] = useState("");
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [timer, setTimer] = useState(50);
+  const [canResend, setCanResend] = useState(false);
+
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval>;
+    if (step === "otp" && timer > 0) {
+      interval = setInterval(() => {
+        setTimer((prev) => prev - 1);
+      }, 1000);
+    } else if (timer === 0) {
+      setCanResend(true);
+    }
+    return () => clearInterval(interval);
+  }, [step, timer]);
 
   const handleMobileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -40,6 +54,8 @@ export default function TwoFactorAuth() {
 
     // Move to OTP step
     setStep("otp");
+    setTimer(50);
+    setCanResend(false);
   };
 
   const handleOtpSubmit = async (e: React.FormEvent) => {
@@ -54,24 +70,29 @@ export default function TwoFactorAuth() {
     try {
       // This is crucial for the API call to be authorized
       const tempToken = sessionStorage.getItem("tempToken");
+      const userType = sessionStorage.getItem("userType");
+      const endpoint = userType === "employee" ? "/employees/otp/verify" : "/admin/otp/verify";
 
-      const response = await adminInstance.post("/admin/otp/verify", {
+      const response = await adminInstance.post(endpoint, {
         phoneNumber: mobileNumber,
         otp: Number(otp),
       }, {
         headers: { Authorization: `Bearer ${tempToken}` }
       });
 
-      if (response.data?.status === true && response.data?.data?.token) {
-        const token = response.data.data.token;
-        const user = response.data.data.user;
+      // Handle both nested data.token and direct token response
+      if (response.data?.token || (response.data?.status === true && response.data?.data?.token)) {
+        const token = response.data.token || response.data.data.token;
+        const user = response.data.user || response.data.data.user;
 
         localStorage.setItem("token", token);
         localStorage.setItem("user", JSON.stringify(user));
         sessionStorage.removeItem("tempToken");
+        sessionStorage.removeItem("userType");
 
         toast.success("OTP verified successfully!");
-        navigate("/dashboard");
+        // Force reload to ensure axios instance picks up the new token and permissions apply
+        window.location.href = "/dashboard";
       } else {
         setErrorMsg(response.data?.message || "Invalid OTP");
       }
@@ -82,6 +103,26 @@ export default function TwoFactorAuth() {
       toast.error(errorMessage);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    try {
+      const tempToken = sessionStorage.getItem("tempToken");
+      const userType = sessionStorage.getItem("userType");
+      const endpoint = userType === "employee" ? "/employees/otp/resend" : "/admin/otp/resend";
+
+      await adminInstance.post(endpoint, {
+        phoneNumber: mobileNumber,
+      }, {
+        headers: { Authorization: `Bearer ${tempToken}` }
+      });
+
+      setTimer(50);
+      setCanResend(false);
+      toast.success("OTP resent successfully!");
+    } catch (error: any) {
+      toast.error(error.response?.data?.message || "Failed to resend OTP");
     }
   };
 
@@ -123,11 +164,9 @@ export default function TwoFactorAuth() {
               </p>
             </div>
             {errorMsg && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-red-600 text-sm text-center">
-                  {errorMsg}
-                </p>
-              </div>
+              <p className="text-red-600 text-sm text-center">
+                {errorMsg}
+              </p>
             )}
             <Button
               type="submit"
@@ -166,11 +205,9 @@ export default function TwoFactorAuth() {
             </div>
 
             {errorMsg && (
-              <div className="bg-red-50 border border-red-200 rounded-lg p-3">
-                <p className="text-red-600 text-sm text-center">
-                  {errorMsg}
-                </p>
-              </div>
+              <p className="text-red-600 text-sm text-center">
+                {errorMsg}
+              </p>
             )}
 
             <Button
@@ -182,13 +219,23 @@ export default function TwoFactorAuth() {
             </Button>
 
             <div className="text-center">
-              <p className="text-sm text-muted-foreground mb-2">
-                Didn't receive the OTP?
-              </p>
+              {canResend ? (
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  className="text-sm font-semibold text-pink-600 hover:underline mb-2 block w-full"
+                >
+                  Resend OTP
+                </button>
+              ) : (
+                <p className="text-sm text-muted-foreground mb-2">
+                  Resend OTP in <span className="font-medium text-gray-900">{timer}s</span>
+                </p>
+              )}
               <button
                 type="button"
                 onClick={changeMobileNumber}
-                className="text-xs text-pink-600 hover:underline font-semibold"
+                className="text-xs text-gray-500 hover:underline"
               >
                 Change mobile number
               </button>

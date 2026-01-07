@@ -7,6 +7,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "@/components/ui/use-toast"; // Using the existing toast system for consistency
 import { Eye, EyeOff } from "lucide-react";
 import loginImage from "@/images/login-bg.png";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { loginEmployee } from "@/adminApi/employeeApi";
 
 export default function Login() {
   const navigate = useNavigate();
@@ -15,16 +23,40 @@ export default function Login() {
   const [keepLoggedIn, setKeepLoggedIn] = useState(false);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [userType, setUserType] = useState("admin");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
 
     try {
-      const response = await adminInstance.post("/admin/login", {
-        email,
-        password,
-      });
+      let response;
+      if (userType === "employee") {
+        const data = await loginEmployee({ email, password });
+        response = { data }; // Wrapping to match existing response structure
+      } else {
+        response = await adminInstance.post("/admin/login", {
+          email,
+          password,
+        });
+      }
+
+      // Handle Direct Login Success (If token is returned immediately without OTP)
+      if (response.data?.token || (response.data?.status && response.data?.data?.token && !response.data?.data?.otp)) {
+        const token = response.data.token || response.data.data.token;
+        const user = response.data.user || response.data.data.user;
+        
+        localStorage.setItem("token", token);
+        if (user) localStorage.setItem("user", JSON.stringify(user));
+        
+        toast({
+          title: "Login Successful",
+          description: "Welcome back!",
+        });
+        // Force reload to ensure axios instance picks up the new token and permissions apply
+        window.location.href = "/dashboard";
+        return;
+      }
 
       // Logic from your new code: Check for status and OTP presence
       if (response.data?.status && response.data?.data?.otp) {
@@ -37,6 +69,7 @@ export default function Login() {
         if (response.data.data.isNew !== undefined) {
           localStorage.setItem("isNewUser", response.data.data.isNew.toString());
         }
+        sessionStorage.setItem("userType", userType);
         navigate("/2fa");
       } else {
         toast({
@@ -80,6 +113,22 @@ export default function Login() {
           </h2>
 
           <form onSubmit={handleSubmit} className="space-y-6">
+            {/* User Type Selection */}
+            <div>
+              <label className="block text-sm mb-2 font-medium text-gray-700">
+                Login As
+              </label>
+              <Select value={userType} onValueChange={setUserType}>
+                <SelectTrigger className="w-full border-gray-300 h-11 rounded-md focus:ring-2 focus:ring-pink-400">
+                  <SelectValue placeholder="Select User Type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="employee">Employee</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
             {/* Email */}
             <div>
               <label className="block text-sm mb-2 font-medium text-gray-700">

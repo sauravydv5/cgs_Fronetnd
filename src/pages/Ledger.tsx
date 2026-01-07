@@ -1,4 +1,3 @@
-// Ledger.jsx
 import { AdminLayout } from "@/components/AdminLayout";
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Download, Loader2 } from "lucide-react";

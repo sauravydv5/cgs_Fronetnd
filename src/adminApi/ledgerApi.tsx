@@ -11,3 +11,7 @@ export const getSupplierLedger = (params?: any) => {
 export const getCustomerLedger = (params?: any) => {
   return adminInstance.get("/ledger/customer", { params });
 };
+
+export const getLedgerByDateRange = (startDate: string, endDate: string) => {
+  return adminInstance.get("/ledger/date-range", { params: { startDate, endDate } });
+};

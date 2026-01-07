@@ -9,6 +9,8 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -30,7 +32,8 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { toast } from "sonner";
-import { getAllPurchaseReturns, updatePurchaseReturn, deletePurchaseReturn } from "@/adminApi/purchaseReturnApi";
+import { getAllPurchaseReturns, updatePurchaseReturn, deletePurchaseReturn, getPurchaseReturnsByDateRange } from "@/adminApi/purchaseReturnApi";
+import { Label } from "@/components/ui/label";
 export default function ReturnPurchase() {
   const [search, setSearch] = useState("");
   const [returns, setReturns] = useState([]);
@@ -45,6 +48,8 @@ export default function ReturnPurchase() {
     amount: "",
     status: "",
   });
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
   const initialColumns = [
     { id: "returnId", label: "RETURN ID" },
@@ -100,6 +105,62 @@ export default function ReturnPurchase() {
   useEffect(() => {
     fetchReturns();
   }, [fetchReturns]);
+
+  const handleDateRangeSearch = async () => {
+    if (!dateRange.start || !dateRange.end) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await getPurchaseReturnsByDateRange(dateRange.start, dateRange.end);
+      console.log("📅 Date Range Response:", response);
+
+      let returnsData = [];
+      let dataFound = false;
+
+      // Robust parsing similar to OrderManagement
+      if (response.success && Array.isArray(response.data)) {
+        returnsData = response.data;
+        dataFound = true;
+      } else if (response.data && Array.isArray(response.data)) {
+        returnsData = response.data;
+        dataFound = true;
+      } else if (response.data?.data && Array.isArray(response.data.data)) {
+        returnsData = response.data.data;
+        dataFound = true;
+      } else if (Array.isArray(response)) {
+        returnsData = response;
+        dataFound = true;
+      }
+
+      if (dataFound || response.success) {
+        const flattenedReturns = returnsData.flatMap((ret: any) => {
+          if (ret.items && ret.items.length > 0) {
+            return ret.items.map((item: any) => ({
+              ...ret,
+              _id: `${ret._id}-${item._id}`,
+              product: item.product,
+              qty: item.qty || 0,
+              amount: item.amount ?? ((item.qty || 0) * (item.rate || 0)),
+            }));
+          }
+          return [{ ...ret, _id: ret._id, product: null, qty: 0, amount: ret.totalAmount }];
+        });
+        setReturns(flattenedReturns);
+        setDateFilterOpen(false);
+        toast.success(`Found ${flattenedReturns.length} returns.`);
+      } else {
+        toast.error(response.message || "Failed to fetch returns.");
+      }
+    } catch (error: any) {
+      console.error("Failed to fetch returns by date:", error);
+      toast.error(error.response?.data?.message || "Failed to fetch returns");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const SortableHeader = ({ column }: { column: { id: string; label: string } }) => {
     const { attributes, listeners, setNodeRef, transform, transition } =
@@ -253,6 +314,7 @@ export default function ReturnPurchase() {
           <Button
             variant="outline"
             className="rounded-full flex items-center gap-2"
+            onClick={() => setDateFilterOpen(true)}
           >
             <Calendar size={18} />
           </Button>
@@ -356,6 +418,44 @@ export default function ReturnPurchase() {
           <button className="px-2 py-1 rounded hover:bg-gray-100">&gt;</button>
         </div>
       </div>
+
+      {/* Date Range Filter Dialog */}
+      <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+        <DialogContent className="w-full max-w-md">
+          <DialogHeader>
+            <DialogTitle>Filter Purchase Returns by Date</DialogTitle>
+            <DialogDescription>
+              Select a start and end date to view returns within that range.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="endDate">End Date</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDateFilterOpen(false)}>Cancel</Button>
+            <Button className="bg-[#E98C81] hover:bg-[#f48c83]" onClick={handleDateRangeSearch}>Apply Filter</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit Return Modal */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>

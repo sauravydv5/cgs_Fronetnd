@@ -29,10 +29,20 @@ import {
   deletePurchaseDetail,
   addPurchaseDetail,
   updatePurchaseDetail,
+  getPurchaseByDateRange,
 } from "@/adminApi/purchaseDetailApi";
 import { getAllSuppliers } from "@/adminApi/supplierApi";
 import { addPurchaseReturn } from "@/adminApi/purchaseReturnApi";
 import { format } from "date-fns";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
 
 export default function PurchaseDetail() {
   const [purchases, setPurchases] = useState([]);
@@ -54,6 +64,8 @@ export default function PurchaseDetail() {
     paymentMethod: "CASH",
     status: "PENDING",
   });
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
   const initialColumns = [
     { id: "purchaseId", label: "PURCHASE ID" },
@@ -103,6 +115,31 @@ export default function PurchaseDetail() {
       console.error("Failed to fetch suppliers for dropdown.");
     }
   }, []);
+
+  const handleDateRangeSearch = async () => {
+    if (!dateRange.start || !dateRange.end) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await getPurchaseByDateRange(dateRange.start, dateRange.end);
+      if (response.success || response.status) {
+        const data = response.data || response.purchases || [];
+        setPurchases(data);
+        setDateFilterOpen(false);
+        toast.success(`Found ${data.length} purchases`);
+      } else {
+        toast.error(response.message || "Failed to fetch purchases");
+      }
+    } catch (error: any) {
+      console.error("Failed to fetch purchases by date:", error);
+      toast.error(error.response?.data?.message || "Failed to fetch purchases");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleDelete = async (purchaseId: string) => {
     if (window.confirm("Are you sure you want to delete this purchase record?")) {
@@ -292,6 +329,7 @@ export default function PurchaseDetail() {
               variant="outline"
               size="icon"
               className="rounded-full border-[#e48a7c] text-[#e48a7c] hover:bg-[#fff4f2]"
+              onClick={() => setDateFilterOpen(true)}
             >
               <Calendar size={18} />
             </Button>
@@ -579,6 +617,51 @@ export default function PurchaseDetail() {
           </div>
         </div>
       )}
+
+      {/* Date Range Filter Dialog */}
+      <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+        <DialogContent className="w-full max-w-md">
+          <DialogHeader>
+            <DialogTitle>Filter Purchases by Date</DialogTitle>
+            <DialogDescription>
+              Select a start and end date to view purchases within that range.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="endDate">End Date</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-[#E98C81] hover:bg-[#f48c83]"
+              onClick={handleDateRangeSearch}
+            >
+              Apply Filter
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 import { AdminLayout } from "@/components/AdminLayout";
-import { getAllReports } from "@/adminApi/reportApi";
+import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, Download } from "lucide-react";
@@ -51,7 +51,12 @@ export default function HSN() {
       setLoading(true);
       setError(null);
       try {
-        const response = await getAllReports();
+        let response;
+        if (fromDate && toDate) {
+          response = await getReportsByDateRange(fromDate, toDate);
+        } else {
+          response = await getAllReports();
+        }
         if (response.success && Array.isArray(response.bills)) {
           const hsnSummary: { [key: string]: any } = {};
 
@@ -147,6 +152,32 @@ export default function HSN() {
     }
   };
 
+  const handleExport = () => {
+    if (!data || data.length === 0) return;
+
+    const csvContent = [
+      columns.map((col) => col.label).join(","),
+      ...data.map((row) =>
+        columns
+          .map((col) => {
+            const val = row[col.id];
+            const str = String(val ?? "");
+            return str.includes(",") ? `"${str}"` : str;
+          })
+          .join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `HSN_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <AdminLayout title="Report > HSN Date Wise">
       <div className="p-6 w-full bg-white">
@@ -164,11 +195,11 @@ export default function HSN() {
                   size={18}
                 />
                 <Input
-                  type="text"
-                  placeholder="DD-MM-YY"
+                  type="date"
                   className="pl-10 pr-4 w-[180px] h-[42px] rounded-lg bg-[#F5F5F5] border border-gray-300 text-gray-700 focus:ring-0 focus:outline-none"
                   value={fromDate}
                   onChange={(e) => setFromDate(e.target.value)}
+                  onKeyDown={(e) => e.preventDefault()}
                 />
               </div>
             </div>
@@ -182,11 +213,11 @@ export default function HSN() {
                   size={18}
                 />
                 <Input
-                  type="text"
-                  placeholder="DD-MM-YY"
+                  type="date"
                   className="pl-10 pr-4 w-[180px] h-[42px] rounded-lg bg-[#F5F5F5] border border-gray-300 text-gray-700 focus:ring-0 focus:outline-none"
                   value={toDate}
                   onChange={(e) => setToDate(e.target.value)}
+                  onKeyDown={(e) => e.preventDefault()}
                 />
               </div>
             </div>
@@ -196,7 +227,11 @@ export default function HSN() {
               <label className="text-[13px] text-transparent mb-1 select-none">
                 Export
               </label>
-              <Button className="bg-[#E98C81] hover:bg-[#d87b71] text-white rounded-lg w-[239px] h-[42px] text-[15px] font-medium flex items-center justify-center gap-2 shadow-sm">
+              <Button
+                onClick={handleExport}
+                disabled={loading || data.length === 0}
+                className="bg-[#E98C81] hover:bg-[#d87b71] text-white rounded-lg w-[239px] h-[42px] text-[15px] font-medium flex items-center justify-center gap-2 shadow-sm"
+              >
                 Export
                 <Download size={18} />
               </Button>
@@ -323,68 +358,57 @@ export default function HSN() {
                         {columns.map((col, idx) => {
                           if (idx === 0) {
                             return (
-                              <td key={col.id} className="p-3" colSpan={3}>
+                              <td key={col.id} className="p-3 text-left">
                                 TOTAL
                               </td>
                             );
                           }
-                          if (idx === 1 || idx === 2) {
-                            return null;
-                          }
-                          if (col.id === "qty") {
-                            return (
-                              <td key={col.id} className="p-3 text-right">
-                                {data
-                                  .reduce((s, r) => s + r.qty, 0)
-                                  .toLocaleString("en-IN")}
-                              </td>
-                            );
-                          }
-                          if (col.id === "taxable") {
-                            return (
-                              <td key={col.id} className="p-3 text-right">
-                                {data
-                                  .reduce((s, r) => s + r.taxable, 0)
-                                  .toLocaleString("en-IN", {
+                          switch (col.id) {
+                            case "qty":
+                              return (
+                                <td key={col.id} className="p-3 text-right">
+                                  {data.reduce((s, r) => s + r.qty, 0).toLocaleString("en-IN")}
+                                </td>
+                              );
+                            case "taxable":
+                              return (
+                                <td key={col.id} className="p-3 text-right">
+                                  {data.reduce((s, r) => s + r.taxable, 0).toLocaleString("en-IN", {
                                     minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
                                   })}
-                              </td>
-                            );
-                          }
-                          if (col.id === "cgst") {
-                            return (
-                              <td key={col.id} className="p-3 text-right">
-                                {data
-                                  .reduce((s, r) => s + r.cgst, 0)
-                                  .toLocaleString("en-IN", {
+                                </td>
+                              );
+                            case "cgst":
+                              return (
+                                <td key={col.id} className="p-3 text-right">
+                                  {data.reduce((s, r) => s + r.cgst, 0).toLocaleString("en-IN", {
                                     minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
                                   })}
-                              </td>
-                            );
-                          }
-                          if (col.id === "sgst") {
-                            return (
-                              <td key={col.id} className="p-3 text-right">
-                                {data
-                                  .reduce((s, r) => s + r.sgst, 0)
-                                  .toLocaleString("en-IN", {
+                                </td>
+                              );
+                            case "sgst":
+                              return (
+                                <td key={col.id} className="p-3 text-right">
+                                  {data.reduce((s, r) => s + r.sgst, 0).toLocaleString("en-IN", {
                                     minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
                                   })}
-                              </td>
-                            );
-                          }
-                          if (col.id === "total") {
-                            return (
-                              <td key={col.id} className="p-3 text-right">
-                                {data
-                                  .reduce((s, r) => s + r.total, 0)
-                                  .toLocaleString("en-IN", {
+                                </td>
+                              );
+                            case "total":
+                              return (
+                                <td key={col.id} className="p-3 text-right">
+                                  {data.reduce((s, r) => s + r.total, 0).toLocaleString("en-IN", {
                                     minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
                                   })}
-                              </td>
-                            );
+                                </td>
+                              );
+                            default:
+                              return <td key={col.id} className="p-3"></td>;
                           }
-                          return <td key={col.id}></td>;
                         })}
                       </tr>
                     )}

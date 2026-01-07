@@ -11,6 +11,19 @@ export const getAllSuppliers = async () => {
   }
 };
 
+// get suppliers by date range
+export const getSuppliersByDateRange = async (startDate: string, endDate: string) => {
+  try {
+    const response = await adminInstance.get("/suppliers/date-range", {
+      params: { startDate, endDate },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching suppliers by date range:", error);
+    throw error;
+  }
+};
+
 // add a new supplier
 export const addSupplier = async (supplierData: any) => {
   try {

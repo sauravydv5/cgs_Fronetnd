@@ -23,7 +23,7 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { getAllOrders, updateOrderStatus } from "@/adminApi/orderApi";
+import { getAllOrders, updateOrderStatus, getOrdersByDateRange } from "@/adminApi/orderApi";
 import {
   Select,
   SelectContent,
@@ -73,6 +73,9 @@ const SortableHeader = ({
 export default function OrderManagement() {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [updateDialogOpen, setUpdateDialogOpen] = useState(false);
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [appliedDateRange, setAppliedDateRange] = useState({ start: "", end: "" });
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
   const [updating, setUpdating] = useState(false);
 
@@ -118,7 +121,7 @@ export default function OrderManagement() {
   }, [searchQuery]);
 
   const fetchOrders = useCallback(
-    async (page: number, status: string, search: string) => {
+    async (page: number, status: string, search: string, dates?: { start: string; end: string }) => {
       setLoading(true);
       try {
         // Pass status to API - if status is empty string, API should return all orders
@@ -134,6 +137,11 @@ export default function OrderManagement() {
           params.status = status;
         }
 
+        if (dates?.start && dates?.end) {
+          params.startDate = dates.start;
+          params.endDate = dates.end;
+        }
+
         console.log("🔍 Fetching orders with params:", params);
 
         // @ts-ignore
@@ -142,37 +150,44 @@ export default function OrderManagement() {
         let orderData = [];
         let count = 0;
 
+        console.log("🔍 Raw API Response:", response);
+
         // Enhanced response parsing
         if (
+          response.data?.data &&
+          Array.isArray(response.data.data)
+        ) {
+          console.log("✅ Detected structure: response.data.data (Array)");
+          orderData = response.data.data;
+          count = response.data.count || response.data.total || orderData.length;
+        } else if (
           response.data?.data?.rows &&
           Array.isArray(response.data.data.rows)
         ) {
+          console.log("✅ Detected structure: response.data.data.rows (Array)");
           orderData = response.data.data.rows;
           count = response.data.data.count || orderData.length;
         } else if (
           response.data?.orders &&
           Array.isArray(response.data.orders)
         ) {
+          console.log("✅ Detected structure: response.data.orders (Array)");
           orderData = response.data.orders;
           count = response.data.total || orderData.length;
         } else if (response.data?.rows && Array.isArray(response.data.rows)) {
+          console.log("✅ Detected structure: response.data.rows (Array)");
           orderData = response.data.rows;
           count = response.data.count || orderData.length;
-        } else if (response.data?.data && Array.isArray(response.data.data)) {
-          orderData = response.data.data;
-          count = response.data.count || orderData.length;
-        } else if (Array.isArray(response.data)) {
+        } else if (response.data && Array.isArray(response.data)) {
+          // This handles cases where response.data IS the array (or if interceptor unwrapped it)
+          console.log("✅ Detected structure: response.data (Array)");
           orderData = response.data;
           count = orderData.length;
-        } else if (
-          response.data?.result &&
-          Array.isArray(response.data.result)
-        ) {
-          orderData = response.data.result;
-          count = response.data.total || orderData.length;
-        } else if (response.data?.items && Array.isArray(response.data.items)) {
-          orderData = response.data.items;
-          count = response.data.total || orderData.length;
+        } else if (Array.isArray(response)) {
+          // This handles cases where the response itself is the array (interceptor unwrapped deeply)
+          console.log("✅ Detected structure: response (Array)");
+          orderData = response;
+          count = orderData.length;
         } else {
           console.error("❌ COULD NOT FIND ORDERS IN RESPONSE!");
           console.error(
@@ -215,6 +230,24 @@ export default function OrderManagement() {
           }
         }
 
+        // Client-side date filtering fallback (in case backend ignores params)
+        if (dates?.start && dates?.end && orderData.length > 0) {
+          const startDate = new Date(dates.start);
+          startDate.setHours(0, 0, 0, 0);
+          const endDate = new Date(dates.end);
+          endDate.setHours(23, 59, 59, 999);
+
+          const dateFiltered = orderData.filter((order: any) => {
+            const orderDate = new Date(order.createdAt);
+            return orderDate >= startDate && orderDate <= endDate;
+          });
+
+          if (dateFiltered.length < orderData.length) {
+            orderData = dateFiltered;
+            count = dateFiltered.length;
+          }
+        }
+
         setOrders(orderData);
         setTotalOrders(count);
         setTotalPages(Math.ceil(count / itemsPerPage));
@@ -230,8 +263,8 @@ export default function OrderManagement() {
 
   // Fetch orders whenever page, status, or DEBOUNCED search changes
   useEffect(() => {
-    fetchOrders(currentPage, activeTab, debouncedSearchQuery);
-  }, [currentPage, activeTab, debouncedSearchQuery, fetchOrders]);
+    fetchOrders(currentPage, activeTab, debouncedSearchQuery, appliedDateRange);
+  }, [currentPage, activeTab, debouncedSearchQuery, appliedDateRange, fetchOrders]);
 
   useEffect(() => {
     localStorage.setItem("orderTableColumnOrder", JSON.stringify(columns));
@@ -270,7 +303,7 @@ export default function OrderManagement() {
       await updateOrderStatus(selectedOrder._id, payload);
 
       // Refresh the orders list to show updated data
-      await fetchOrders(currentPage, activeTab, debouncedSearchQuery);
+      await fetchOrders(currentPage, activeTab, debouncedSearchQuery, appliedDateRange);
 
       toast.success("Order status updated successfully!");
       setUpdateDialogOpen(false);
@@ -289,6 +322,18 @@ export default function OrderManagement() {
     } finally {
       setUpdating(false);
     }
+  };
+
+  const handleDateRangeSearch = async () => {
+    if (!dateRange.start || !dateRange.end) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+    
+    // Just update state, useEffect will trigger fetchOrders
+    setAppliedDateRange(dateRange);
+    setDateFilterOpen(false);
+    setCurrentPage(1);
   };
 
   const renderCell = (order: any, columnId: string) => {
@@ -336,10 +381,10 @@ export default function OrderManagement() {
           setSelectedOrder(order);
           setStatusForm({
             status: order.status || "",
-            trackingNumber: order.trackingNumber || "",
-            carrier: order.carrier || "",
-            estimatedDelivery: order.estimatedDelivery
-              ? new Date(order.estimatedDelivery).toISOString().slice(0, 16)
+            trackingNumber: order.tracking?.trackingNumber || order.trackingNumber || "",
+            carrier: order.tracking?.carrier || order.carrier || "",
+            estimatedDelivery: (order.tracking?.estimatedDelivery || order.estimatedDelivery)
+              ? new Date(order.tracking?.estimatedDelivery || order.estimatedDelivery).toISOString().slice(0, 16)
               : "",
           });
           setUpdateDialogOpen(true);
@@ -408,12 +453,18 @@ export default function OrderManagement() {
               )}
             </div>
 
-            <CalendarDays className="w-6 h-6 text-[#f48c83] cursor-pointer" />
+            <button 
+              onClick={() => setDateFilterOpen(true)}
+              title="Filter by Date Range"
+              className="focus:outline-none"
+            >
+              <CalendarDays className="w-6 h-6 text-[#f48c83] cursor-pointer hover:text-[#d16b62] transition-colors" />
+            </button>
 
-            <div className="relative">
+            {/* <div className="relative">
               <Bell className="w-6 h-6 text-[#003049]" />
               <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#f48c83]" />
-            </div>
+            </div> */}
           </div>
 
           <div className="col-span-1"></div>
@@ -427,6 +478,7 @@ export default function OrderManagement() {
             { label: "Processing", value: "Processing" },
             { label: "Shipped", value: "Shipped" },
             { label: "Delivered", value: "Delivered" },
+            { label: "Cancelled", value: "Cancelled" },
           ].map((tab) => (
             <button
               key={tab.label}
@@ -611,17 +663,17 @@ export default function OrderManagement() {
               </div>
             </div>
 
-            {selectedOrder?.trackingNumber && (
+            {(selectedOrder?.tracking?.trackingNumber || selectedOrder?.trackingNumber) && (
               <div>
                 <p className="text-sm text-muted-foreground">Tracking Number</p>
-                <p className="font-medium">{selectedOrder.trackingNumber}</p>
+                <p className="font-medium">{selectedOrder.tracking?.trackingNumber || selectedOrder.trackingNumber}</p>
               </div>
             )}
 
-            {selectedOrder?.carrier && (
+            {(selectedOrder?.tracking?.carrier || selectedOrder?.carrier) && (
               <div>
                 <p className="text-sm text-muted-foreground">Carrier</p>
-                <p className="font-medium">{selectedOrder.carrier}</p>
+                <p className="font-medium">{selectedOrder.tracking?.carrier || selectedOrder.carrier}</p>
               </div>
             )}
           </div>
@@ -724,6 +776,61 @@ export default function OrderManagement() {
               disabled={updating || !statusForm.status}
             >
               {updating ? "Updating..." : "Update Status"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Date Range Filter Dialog */}
+      <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+        <DialogContent className="w-full max-w-md">
+          <DialogHeader>
+            <DialogTitle>Filter Orders by Date</DialogTitle>
+            <DialogDescription>
+              Select a start and end date to view orders within that range.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="endDate">End Date</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="ghost" 
+              onClick={() => {
+                setDateRange({ start: "", end: "" });
+                setAppliedDateRange({ start: "", end: "" });
+                setDateFilterOpen(false);
+              }}
+            >
+              Clear Filter
+            </Button>
+            <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-[#E98C81] hover:bg-[#f48c83]"
+              onClick={handleDateRangeSearch}
+            >
+              Apply Filter
             </Button>
           </DialogFooter>
         </DialogContent>

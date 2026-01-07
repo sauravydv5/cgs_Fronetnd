@@ -65,3 +65,16 @@ export const deletePurchaseDetail = async (id: string) => {
     throw error;
   }
 };
+
+// get purchase details by date range
+export const getPurchaseByDateRange = async (startDate: string, endDate: string) => {
+  try {
+    const response = await adminInstance.get("/purchases/date-range", {
+      params: { startDate, endDate },
+    });
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching purchase details by date range:", error);
+    throw error;
+  }
+};

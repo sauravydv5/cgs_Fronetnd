@@ -42,7 +42,12 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-import { addNewBill, getBillsByCustomerId, generateBill, updateBillPaymentStatus } from '@/adminApi/billApi'; // Assuming the api is in billApi
+import {
+  addNewBill,
+  getBillsByCustomerId,
+  generateBill,
+  updateBillPaymentStatus,
+} from "@/adminApi/billApi"; // Assuming the api is in billApi
 import { getAllProducts } from "@/adminApi/productApi";
 import { toast } from "sonner";
 
@@ -70,11 +75,17 @@ export default function NewBill() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newBillItems, setNewBillItems] = useState<any[]>([]);
-  const [generatedBillHtml, setGeneratedBillHtml] = useState<string | null>(null);
+  const [generatedBillHtml, setGeneratedBillHtml] = useState<string | null>(
+    null
+  );
   const [showGeneratedBill, setShowGeneratedBill] = useState(false);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [statusConfirmationOpen, setStatusConfirmationOpen] = useState(false);
-  const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{ billId: string; status: string } | null>(null);
+  const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{
+    billId: string;
+    status: string;
+  } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const initialColumns = [
     { id: "sno", label: "SNO." },
@@ -142,9 +153,9 @@ export default function NewBill() {
         setLoading(true);
         // Clear previous data to prevent showing stale bills from another customer
         setRows([]);
-        setCustomerInfo({ 
-          name: location.state?.customerName || "", 
-          code: location.state?.customerCode || "" 
+        setCustomerInfo({
+          name: location.state?.customerName || "",
+          code: location.state?.customerCode || "",
         });
 
         const response = await getBillsByCustomerId(customerId);
@@ -156,8 +167,10 @@ export default function NewBill() {
           response.bills.length > 0
         ) {
           const firstBill = response.bills[0];
-          const customerName = firstBill.customerName || firstBill.customerId?.name;
-          const customerCode = firstBill.customerCode || firstBill.customerId?.customerCode;
+          const customerName =
+            firstBill.customerName || firstBill.customerId?.name;
+          const customerCode =
+            firstBill.customerCode || firstBill.customerId?.customerCode;
 
           if (customerName) {
             setCustomerInfo({
@@ -350,7 +363,7 @@ export default function NewBill() {
         toast.success("Bill generated successfully!");
 
         // Decode base64 to HTML string for srcDoc (allows printing)
-        const base64Part = billDataUrl.split(',')[1];
+        const base64Part = billDataUrl.split(",")[1];
         const binaryString = window.atob(base64Part);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
@@ -361,10 +374,16 @@ export default function NewBill() {
         setGeneratedBillHtml(decodedHtml);
         setShowGeneratedBill(true);
       } else {
-        toast.error(response.message || "Bill generated but no viewable file was returned.");
+        toast.error(
+          response.message ||
+            "Bill generated but no viewable file was returned."
+        );
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.message || "Failed to generate bill. Please try again.");
+      toast.error(
+        error.response?.data?.message ||
+          "Failed to generate bill. Please try again."
+      );
       console.error("Error generating bill:", error);
     }
   };
@@ -382,7 +401,10 @@ export default function NewBill() {
       mrp: item.rate || item.mrp,
       cd: item.discountPercent || item.cd,
       // Ensure productId is present
-      productId: typeof item.productId === 'object' ? item.productId?._id : item.productId,
+      productId:
+        typeof item.productId === "object"
+          ? item.productId?._id
+          : item.productId,
       // Ensure other fields are present
       itemCode: item.itemCode,
       itemName: item.itemName,
@@ -392,7 +414,7 @@ export default function NewBill() {
       lot: item.lot,
       qty: item.qty,
       tax: item.tax,
-      netAmount: item.netAmount
+      netAmount: item.netAmount,
     }));
 
     setEditingBillId(billId);
@@ -404,6 +426,39 @@ export default function NewBill() {
     if (!confirm("Are you sure you want to delete this bill?")) return;
     await deleteBill(billId);
     navigate(0);
+  };
+
+  // Helper to calculate row amounts (net, tax, total)
+  const calculateRowAmount = ({
+    mrp = 0,
+    qty = 0,
+    cd = 0,
+    tax = 0,
+  }: {
+    mrp?: number | string;
+    qty?: number | string;
+    cd?: number | string;
+    tax?: number | string;
+  }) => {
+    const m = Number(mrp) || 0;
+    const q = Number(qty) || 0;
+    const discountPercent = Number(cd) || 0;
+    const gstPercent = Number(tax) || 0;
+
+    const gross = m * q;
+    const discountAmount = (gross * discountPercent) / 100;
+    const taxable = gross - discountAmount;
+
+    const cgst = (taxable * gstPercent) / 200;
+    const sgst = (taxable * gstPercent) / 200;
+
+    const total = taxable + cgst + sgst;
+
+    return {
+      netAmount: taxable.toFixed(2), // ✅ NET (without GST)
+      taxAmount: (cgst + sgst).toFixed(2),
+      total: total.toFixed(2), // ✅ FINAL PAYABLE
+    };
   };
 
   const handleNewBillProductSelect = (product: any, rowIndex: number) => {
@@ -418,28 +473,27 @@ export default function NewBill() {
       const mrp = Number(product.mrp) || 0;
       const qty = Number(row.qty) || 1;
       const cd = Number(product.discount) || 0;
-      const netAmount = (mrp * qty) - ((mrp * qty * cd) / 100);
+      const tax = Number(product.gst) || 0;
+
+      const calc = calculateRowAmount({ mrp, qty, cd, tax });
 
       updated[rowIndex] = {
         ...row,
+        productId: product._id,
 
-        // 🔑 THIS IS THE FIX
-        productId: productId,
-
-        // UI fields
         itemCode: product.itemCode,
         itemName: product.productName,
         companyName: product.brandName,
         hsnCode: product.hsnCode,
         packing: product.packSize,
-        mrp: mrp,
-        rate: mrp,
-        tax: product.gst || 0, // Map product GST to tax field
 
-        // defaults
-        qty: qty,
-        cd: cd,
-        netAmount: netAmount.toFixed(2),
+        mrp,
+        rate: mrp,
+        qty,
+        cd,
+        tax,
+
+        netAmount: calc.netAmount, // ✅ taxable only
       };
 
       return updated;
@@ -458,17 +512,16 @@ export default function NewBill() {
         [field]: value,
       };
 
-      // Auto-calculate netAmount when MRP, Qty, or C.D changes
-      if (["mrp", "qty", "cd"].includes(field)) {
-        const mrp = parseFloat(updatedRow.mrp) || 0;
-        const qty = parseInt(updatedRow.qty, 10) || 0;
-        const cd = parseFloat(updatedRow.cd) || 0; // Cash Discount percentage
+      // Auto-calculate netAmount when MRP, Qty, C.D or Tax changes
+      if (["mrp", "qty", "cd", "tax"].includes(field)) {
+        const calc = calculateRowAmount({
+          mrp: updatedRow.mrp,
+          qty: updatedRow.qty,
+          cd: updatedRow.cd,
+          tax: updatedRow.tax,
+        });
 
-        const grossAmount = mrp * qty;
-        const discountValue = grossAmount * (cd / 100);
-        const netAmount = grossAmount - discountValue;
-
-        updatedRow.netAmount = netAmount.toFixed(2); // Format to 2 decimal places
+        updatedRow.netAmount = calc.netAmount; // ✅ taxable amount only
       }
 
       newRows[index] = updatedRow;
@@ -504,11 +557,13 @@ export default function NewBill() {
     try {
       await updateBillPaymentStatus(billId, status);
       toast.success("Payment status updated");
-      if (status === 'Draft') {
-        navigate('/bills/drafts');
+      if (status === "Draft") {
+        navigate("/bills/drafts");
       } else {
         setRows((prevRows) =>
-          prevRows.map((row) => (row.billId === billId ? { ...row, paymentStatus: status } : row))
+          prevRows.map((row) =>
+            row.billId === billId ? { ...row, paymentStatus: status } : row
+          )
         );
       }
     } catch (error) {
@@ -520,8 +575,17 @@ export default function NewBill() {
     }
   };
 
+  const filteredRows = rows.filter((row) => {
+    const query = searchQuery.toLowerCase();
+    return (
+      (row.itemCode || "").toLowerCase().includes(query) ||
+      (row.itemName || "").toLowerCase().includes(query) ||
+      (row.companyName || "").toLowerCase().includes(query)
+    );
+  });
+
   return (
-    <AdminLayout title={`Bill Listing > ${customerInfo.name || 'Customer'}`}>
+    <AdminLayout title={`Bill Listing > ${customerInfo.name || "Customer"}`}>
       <div className="p-4 sm:p-6 bg-white min-h-screen text-[#3E3E3E] flex flex-col justify-between overflow-hidden relative">
         {/* === Top Section === */}
         <div className="space-y-6">
@@ -529,7 +593,9 @@ export default function NewBill() {
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
               <div className="relative w-full sm:w-64">
                 <Input
-                  placeholder="Search by name"
+                  placeholder="Search by name, code or company"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
                   className="pl-10 w-full h-10 bg-gradient-to-r from-[#FBEFEF] to-[#FFE7E7] border border-[#F8C7B6] rounded-full shadow-sm placeholder:text-[#B27272] focus:ring-0 focus:border-none"
                 />
                 <Search
@@ -610,7 +676,9 @@ export default function NewBill() {
                         <td className="py-3 px-4">
                           <Select
                             value={row.paymentStatus}
-                            onValueChange={(value) => initiatePaymentStatusChange(row.billId, value)}
+                            onValueChange={(value) =>
+                              initiatePaymentStatusChange(row.billId, value)
+                            }
                           >
                             <SelectTrigger className="w-[110px] h-8 text-xs bg-white border-gray-300">
                               <SelectValue placeholder="Status" />
@@ -673,8 +741,8 @@ export default function NewBill() {
                       </DndContext>
                     </thead>
                     <tbody>
-                      {rows.length > 0 ? (
-                        rows.map((r) => (
+                      {filteredRows.length > 0 ? (
+                        filteredRows.map((r) => (
                           <tr
                             key={r.id}
                             className="bg-white hover:bg-[#FFF7F7] transition-colors border-t border-[#F3D9D9]"
@@ -724,7 +792,9 @@ export default function NewBill() {
             <DialogTitle>Generated Bill</DialogTitle>
             <Button
               onClick={() => {
-                const iframe = document.getElementById('bill-iframe') as HTMLIFrameElement;
+                const iframe = document.getElementById(
+                  "bill-iframe"
+                ) as HTMLIFrameElement;
                 iframe?.contentWindow?.print();
               }}
             >
@@ -732,7 +802,12 @@ export default function NewBill() {
             </Button>
           </DialogHeader>
           {generatedBillHtml && (
-            <iframe id="bill-iframe" srcDoc={generatedBillHtml} className="w-full h-full border-0" title="Generated Bill Preview"></iframe>
+            <iframe
+              id="bill-iframe"
+              srcDoc={generatedBillHtml}
+              className="w-full h-full border-0"
+              title="Generated Bill Preview"
+            ></iframe>
           )}
         </DialogContent>
       </Dialog>
@@ -976,7 +1051,6 @@ export default function NewBill() {
 
       {/* === Preview Modal === */}
       <Dialog open={openPreview} onOpenChange={setOpenPreview}>
-        
         <DialogContent className="max-w-screen-2xl w-[95vw] bg-white rounded-3xl p-5 sm:p-10 shadow-lg border-none overflow-hidden">
           <div className="overflow-x-auto">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-[#1B2A38] text-base sm:text-lg mb-6 gap-3">
@@ -1055,7 +1129,6 @@ export default function NewBill() {
             </div>
           </div>
         </DialogContent>
-        
       </Dialog>
 
       {/* === Product Details Modal === */}
@@ -1162,17 +1235,31 @@ export default function NewBill() {
       </Dialog>
 
       {/* === Payment Status Confirmation Dialog === */}
-      <Dialog open={statusConfirmationOpen} onOpenChange={setStatusConfirmationOpen}>
+      <Dialog
+        open={statusConfirmationOpen}
+        onOpenChange={setStatusConfirmationOpen}
+      >
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Confirm Status Change</DialogTitle>
             <DialogDescription>
-              Are you sure you want to change the payment status to <strong>{pendingStatusUpdate?.status}</strong>?
+              Are you sure you want to change the payment status to{" "}
+              <strong>{pendingStatusUpdate?.status}</strong>?
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setStatusConfirmationOpen(false)}>Cancel</Button>
-            <Button onClick={confirmPaymentStatusChange} className="bg-[#E98C81] hover:bg-[#d37b70] text-white">Confirm</Button>
+            <Button
+              variant="outline"
+              onClick={() => setStatusConfirmationOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmPaymentStatusChange}
+              className="bg-[#E98C81] hover:bg-[#d37b70] text-white"
+            >
+              Confirm
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

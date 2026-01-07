@@ -63,6 +63,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 
 const initialColumns = [
+  { id: "sno", label: "S.No" },
   { id: "code", label: "Item Code" },
   { id: "brand", label: "Brand Name" },
   { id: "category", label: "Category/Sub Category" },
@@ -130,6 +131,7 @@ export default function ProductManagement() {
     discount: "",
     packSize: "",
     image: "",
+    description: "",
   });
   const [errors, setErrors] = useState<any>({});
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -143,7 +145,14 @@ export default function ProductManagement() {
         const savedColumns = JSON.parse(savedOrder);
         const savedColumnIds = new Set(savedColumns.map((c: any) => c.id));
         const missingColumns = initialColumns.filter((c) => !savedColumnIds.has(c.id));
-        return [...savedColumns, ...missingColumns];
+        
+        const allColumns = [...savedColumns, ...missingColumns];
+        
+        // Force 'sno' to be the first column always
+        const snoColumn = allColumns.find((c) => c.id === "sno");
+        const otherColumns = allColumns.filter((c) => c.id !== "sno");
+        
+        return snoColumn ? [snoColumn, ...otherColumns] : allColumns;
       } catch (e) {
         return initialColumns;
       }
@@ -151,11 +160,6 @@ export default function ProductManagement() {
     return initialColumns;
   });
   const itemsPerPage = 10;
-  
-  const totalPages = Math.ceil(totalProducts / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = Math.min(startIndex + itemsPerPage, totalProducts);
-
   const filteredProducts = products.filter((product) => {
     const query = searchQuery.toLowerCase();
     return (
@@ -166,17 +170,26 @@ export default function ProductManagement() {
     );
   });
 
-  const currentProducts = filteredProducts;
+  // Reset page when search query changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredProducts.length);
+
+  const currentProducts = filteredProducts.slice(startIndex, endIndex);
 
   useEffect(() => {
     localStorage.setItem("productTableColumnOrder", JSON.stringify(columns));
   }, [columns]);
 
-  const fetchProducts = useCallback(async (page = 1) => {
+  const fetchProducts = useCallback(async () => {
     setLoadingProducts(true);
     try {
       // @ts-ignore
-      const response = await getAllProducts({ page, limit: itemsPerPage });
+      const response = await getAllProducts({ limit: 10000 });
 
       let productData = [];
       let count = 0;
@@ -232,13 +245,18 @@ export default function ProductManagement() {
 
   const fetchCategories = useCallback(async () => {
     try {
-      const res = await getAllCategories();
+      // @ts-ignore
+      const res = await getAllCategories({ limit: 1000 });
       let categoryData = [];
 
       if (res?.data?.data?.rows && Array.isArray(res.data.data.rows)) {
         categoryData = res.data.data.rows;
       } else if (res?.data?.rows && Array.isArray(res.data.rows)) {
         categoryData = res.data.rows;
+      } else if (res?.data?.categories && Array.isArray(res.data.categories)) {
+        categoryData = res.data.categories;
+      } else if (res?.data?.data && Array.isArray(res.data.data)) {
+        categoryData = res.data.data;
       } else if (Array.isArray(res?.data)) {
         categoryData = res.data;
       }
@@ -250,9 +268,9 @@ export default function ProductManagement() {
   }, []);
 
   useEffect(() => {
-    fetchProducts(currentPage);
+    fetchProducts();
     fetchCategories();
-  }, [fetchProducts, fetchCategories, currentPage]);
+  }, [fetchProducts, fetchCategories]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -308,6 +326,7 @@ export default function ProductManagement() {
         size: formData.size,
         discount: formData.discount ? parseFloat(formData.discount) : 0,
         packSize: formData.packSize,
+        description: formData.description,
       };
 
       let imageData = formData.image || "";
@@ -350,6 +369,7 @@ export default function ProductManagement() {
           discount: "",
           packSize: "",
           image: "",
+          description: "",
         });
         setErrors({});
         setImagePreview(null);
@@ -391,7 +411,7 @@ export default function ProductManagement() {
         toast.success("Product deleted successfully!");
         setDeleteConfirmationOpen(false);
         setProductToDelete(null);
-        await fetchProducts(currentPage);
+        await fetchProducts();
       } else {
         toast.error(response.data?.message || "Failed to delete product.");
       }
@@ -467,6 +487,7 @@ export default function ProductManagement() {
       discount: "",
       packSize: "",
       image: "",
+      description: "",
     });
     setImagePreview(null);
     setImageFile(null);
@@ -490,6 +511,7 @@ export default function ProductManagement() {
       discount: product.discount?.toString() || "",
       packSize: product.packSize || "",
       image: product.image || "",
+      description: product.description || "",
     });
     setImagePreview(product.image || null);
     setImageFile(null);
@@ -521,18 +543,88 @@ export default function ProductManagement() {
       link.download = `barcode-${barcodeProduct?.itemCode || "product"}.png`;
       link.href = url;
       link.click();
+      toast.success("Barcode saved successfully");
     };
     img.src = "data:image/svg+xml;base64," + btoa(svgData);
   };
 
   const printBarcode = () => {
     const printContent = barcodeRef.current?.innerHTML;
-    const printWindow = window.open("", "_blank");
-    printWindow?.document.write(`<html><head><title>Print Barcode</title></head><body style="text-align:center; margin-top: 20px;">${printContent}</body></html>`);
-    printWindow?.document.close();
-    printWindow?.focus();
-    printWindow?.print();
-    printWindow?.close();
+    if (!printContent) return;
+
+    const itemCode = barcodeProduct?.itemCode || "product";
+    // Sanitize filename to remove invalid characters
+    const fileName = `barcode-${itemCode.replace(/[^a-z0-9-_]/gi, "-")}`;
+
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>${fileName}</title>
+          <style>
+            @page {
+              margin: 20mm;
+            }
+            body {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              justify-content: center;
+              min-height: 100vh;
+              margin: 0;
+              font-family: Arial, sans-serif;
+            }
+            .container {
+              text-align: center;
+            }
+            .product-name {
+              margin-top: 10px;
+              font-weight: bold;
+              font-size: 18px;
+            }
+            .item-code {
+              margin-top: 5px;
+              color: #666;
+              font-size: 14px;
+            }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            ${printContent}
+            <div class="product-name">${barcodeProduct?.productName || ""}</div>
+            <div class="item-code">Item Code: ${itemCode}</div>
+          </div>
+          <script>
+            window.onload = function() {
+              setTimeout(function() {
+                window.print();
+                window.close();
+              }, 500);
+            };
+          </script>
+        </body>
+      </html>
+    `;
+
+    const blob = new Blob([htmlContent], { type: "text/html" });
+    const url = URL.createObjectURL(blob);
+    const printWindow = window.open(url, "_blank");
+
+    if (!printWindow) {
+      toast.error("Popup blocked. Please allow popups to print.");
+    } else {
+      const checkWindowClosed = setInterval(() => {
+        if (printWindow.closed) {
+          clearInterval(checkWindowClosed);
+          toast.success("Print/Save successfully");
+          setBarcodeDialogOpen(false);
+        }
+      }, 500);
+    }
+
+    // Cleanup
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -643,12 +735,14 @@ export default function ProductManagement() {
     return [];
   };
 
-  const renderCell = (product: any, columnId: string) => {
+  const renderCell = (product: any, columnId: string, index: number) => {
     switch (columnId) {
+      case "sno":
+        return <td key={columnId} className="px-6 py-4">{startIndex + index + 1}</td>;
       case "code":
-        return <td className="px-6 py-4">{product.itemCode || "N/A"}</td>
+        return <td key={columnId} className="px-6 py-4">{product.itemCode || "N/A"}</td>;
       case "brand":
-        return <td className="px-6 py-4">{product.brandName || "N/A"}</td>;
+        return <td key={columnId} className="px-6 py-4">{product.brandName || "N/A"}</td>;
       case "category":
         const category = product.category;
         let categoryDisplay = "N/A";
@@ -660,10 +754,10 @@ export default function ProductManagement() {
             categoryDisplay = category.name;
           }
         }
-        return <td className="px-6 py-4">{categoryDisplay}</td>;
+        return <td key={columnId} className="px-6 py-4">{categoryDisplay}</td>;
       case "thumbnail":
         return (
-          <td className="px-6 py-4">
+          <td key={columnId} className="px-6 py-4">
             <div className="w-10 h-10 bg-muted rounded flex items-center justify-center overflow-hidden">
               {product.image ? (
                 <img
@@ -678,14 +772,14 @@ export default function ProductManagement() {
           </td>
         );
       case "name":
-        return <td className="px-6 py-4">{product.productName || "N/A"}</td>;
+        return <td key={columnId} className="px-6 py-4">{product.productName || "N/A"}</td>;
       case "quantity":
-        return <td className="px-6 py-4">{product.stock || 0}</td>;
+        return <td key={columnId} className="px-6 py-4">{product.stock || 0}</td>;
       case "price":
-        return <td className="px-6 py-4">₹{product.mrp || 0}</td>;
+        return <td key={columnId} className="px-6 py-4">₹{product.mrp || 0}</td>;
       case "stock":
         return (
-          <td className="px-6 py-4">
+          <td key={columnId} className="px-6 py-4">
             <span
               className={product.stock > 0 ? "text-green-600" : "text-red-600"}
             >
@@ -695,7 +789,7 @@ export default function ProductManagement() {
         );
       case "barcode":
         return (
-          <td className="px-6 py-4">
+          <td key={columnId} className="px-6 py-4">
             <Button
               size="sm"
               onClick={() => handleGenerateBarcode(product)}
@@ -708,7 +802,7 @@ export default function ProductManagement() {
         );
       case "actions":
         return (
-          <td className="px-6 py-4">
+          <td key={columnId} className="px-6 py-4">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button className="p-1 hover:bg-muted rounded">
@@ -733,12 +827,22 @@ export default function ProductManagement() {
           </td>
         );
       default:
-        return null;
+        return <td key={columnId} />;
     }
   };
 
   return (
     <AdminLayout title="Product Management">
+      <style>{`
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+          -webkit-appearance: none; 
+          margin: 0; 
+        }
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
       <div className="space-y-6">
         <div className="flex flex-wrap gap-4 items-center">
           <Button
@@ -819,9 +923,9 @@ export default function ProductManagement() {
                       </td>
                     </tr>
                   ) : currentProducts.length > 0 ? (
-                    currentProducts.map((product) => (
+                    currentProducts.map((product, index) => (
                       <tr key={product.id || product._id} className="text-sm hover:bg-muted/50">
-                        {columns.map((col) => renderCell(product, col.id))}
+                        {columns.map((col) => renderCell(product, col.id, index))}
                       </tr>
                     ))
                   ) : (
@@ -851,7 +955,7 @@ export default function ProductManagement() {
           {products.length > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t border-border">
               <div className="text-sm text-muted-foreground">
-                Showing {startIndex + 1} to {endIndex} of {totalProducts}{" "}
+                Showing {startIndex + 1} to {endIndex} of {filteredProducts.length}{" "}
                 entries
               </div>
               <div className="flex gap-2">
@@ -1050,7 +1154,10 @@ export default function ProductManagement() {
                         <SelectItem value={category._id}>
                           {category.name}
                         </SelectItem>
-                        {categories.filter(sub => sub.parent?._id === category._id).map(sub => (
+                        {categories.filter(sub => {
+                          const parentId = sub.parent && typeof sub.parent === 'object' ? sub.parent._id : sub.parent;
+                          return parentId === category._id;
+                        }).map(sub => (
                           <SelectItem key={sub._id} value={sub._id}>
                             <span className="ml-4">{sub.name}</span>
                           </SelectItem>
@@ -1062,6 +1169,16 @@ export default function ProductManagement() {
                 {errors.category && (
                   <p className="text-xs text-error">{errors.category}</p>
                 )}
+              </div>
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="description">Description</Label>
+                <Textarea
+                  id="description"
+                  name="description"
+                  placeholder="Enter product description"
+                  value={formData.description}
+                  onChange={handleFormChange}
+                />
               </div>
             </div>
           </div>

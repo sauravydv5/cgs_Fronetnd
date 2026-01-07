@@ -1,6 +1,6 @@
 "use client";
 import { AdminLayout } from "@/components/AdminLayout";
-import { getAllReports } from "@/adminApi/reportApi";
+import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Calendar, Download } from "lucide-react";
@@ -45,7 +45,12 @@ export default function ItemWiseSaleRegister() {
       setLoading(true);
       setError(null);
       try {
-        const response = await getAllReports();
+        let response;
+        if (fromDate && toDate) {
+          response = await getReportsByDateRange(fromDate, toDate);
+        } else {
+          response = await getAllReports();
+        }
         if (response.success && Array.isArray(response.bills)) {
           const allItems = response.bills.flatMap((bill: any) => bill.items || []);
 
@@ -109,6 +114,32 @@ export default function ItemWiseSaleRegister() {
     );
   };
 
+  const handleExport = () => {
+    if (!rows || rows.length === 0) return;
+
+    const csvContent = [
+      columns.map((col) => col.label).join(","),
+      ...rows.map((row) =>
+        columns
+          .map((col) => {
+            const val = row[col.id];
+            const str = String(val ?? "");
+            return str.includes(",") ? `"${str}"` : str;
+          })
+          .join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Item_Wise_Sale_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <AdminLayout title="Reports > Item Wise Sale Report">
       {/* Date Section */}
@@ -120,11 +151,11 @@ export default function ItemWiseSaleRegister() {
             <div className="relative">
               <Calendar className="absolute left-3 top-2.5 text-gray-400" size={18} />
               <Input
-                type="text"
-                placeholder="DD-MM-YY"
+                type="date"
                 className="pl-10 pr-4 w-[180px] h-[42px] rounded-lg bg-[#F5F5F5] border border-gray-300 text-gray-700 focus:ring-0 focus:outline-none"
                 value={fromDate}
                 onChange={(e) => setFromDate(e.target.value)}
+                onKeyDown={(e) => e.preventDefault()}
               />
             </div>
           </div>
@@ -135,11 +166,11 @@ export default function ItemWiseSaleRegister() {
             <div className="relative">
               <Calendar className="absolute left-3 top-2.5 text-gray-400" size={18} />
               <Input
-                type="text"
-                placeholder="DD-MM-YY"
+                type="date"
                 className="pl-10 pr-4 w-[180px] h-[42px] rounded-lg bg-[#F5F5F5] border border-gray-300 text-gray-700 focus:ring-0 focus:outline-none"
                 value={toDate}
                 onChange={(e) => setToDate(e.target.value)}
+                onKeyDown={(e) => e.preventDefault()}
               />
             </div>
           </div>
@@ -150,6 +181,8 @@ export default function ItemWiseSaleRegister() {
               Export
             </button>
             <Button
+              onClick={handleExport}
+              disabled={loading || rows.length === 0}
               className="bg-[#E98C81] hover:bg-[#d87b71] text-white rounded-md w-[160px] h-[38px] text-[14px] font-medium flex items-center justify-center gap-2 shadow-sm"
             >
               Export

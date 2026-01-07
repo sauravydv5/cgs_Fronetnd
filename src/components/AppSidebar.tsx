@@ -20,6 +20,8 @@ import {
   ShoppingBag,
   BookOpen,
   BarChart3,
+  ShieldCheck,
+  UserCog,
 } from "lucide-react";
 import {
   Tooltip,
@@ -38,6 +40,8 @@ const navigation = [
   { name: "Purchases", href: "/purchases", icon: ShoppingBag },
   { name: "Ledger", href: "/ledger", icon: BookOpen },
   { name: "Reports", href: "/reports", icon: BarChart3 },
+  { name: "Employee Management", href: "/employees", icon: UserCog },
+  { name: "Role Management", href: "/roles", icon: ShieldCheck },
 ];
 
 export function AppSidebar() {

@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import axios from "axios";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import image from "@/images/password-recovery-image.png";
+import axiosInstace from "@/adminApi/adminInstance";
+
 
 export default function ForgotPassword() {
   const navigate = useNavigate();
@@ -15,8 +16,8 @@ export default function ForgotPassword() {
     e.preventDefault();
     setLoading(true);
     try {
-      const response = await axios.post(
-        "http://51.20.132.233:5000/api/auth/admin/forgot-password",
+      const response = await axiosInstace.post(
+        "/admin/forget-password",
         { email }
       );
 

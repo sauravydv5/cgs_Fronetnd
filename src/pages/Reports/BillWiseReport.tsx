@@ -3,7 +3,7 @@ import { AdminLayout } from "@/components/AdminLayout";
 import React, { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Download } from "lucide-react";
+import { Search, Download, Calendar } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -16,14 +16,17 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
 import {
-  Select,
-  SelectTrigger,
-  SelectValue,
-  SelectContent,
-  SelectItem,
-} from "@/components/ui/select";
-import { getAllReports } from "@/adminApi/reportApi";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 const transformSaleData = (salesData: any[]) => {
   if (!Array.isArray(salesData)) return [];
@@ -59,6 +62,8 @@ export default function BillWiseReport() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState("");
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
   const [columns, setColumns] = useState(() => {
     const savedOrder = localStorage.getItem("billWiseReportColumnOrder");
@@ -92,6 +97,32 @@ export default function BillWiseReport() {
     fetchReportData();
   }, []);
 
+  const handleDateRangeSearch = async () => {
+    if (!dateRange.start || !dateRange.end) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await getReportsByDateRange(dateRange.start, dateRange.end);
+      if (response.success && Array.isArray(response.bills)) {
+        setRows(transformSaleData(response.bills));
+        setDateFilterOpen(false);
+        toast.success("Reports filtered successfully");
+      } else {
+        setError("Failed to fetch report data: response was not successful.");
+        setRows([]);
+      }
+    } catch (err) {
+      setError("Failed to fetch report data.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const SortableHeader = ({ column }: { column: { id: string; label: string } }) => {
     const { attributes, listeners, setNodeRef, transform, transition } =
       useSortable({ id: column.id });
@@ -122,6 +153,32 @@ export default function BillWiseReport() {
         return arrayMove(items, oldIndex, newIndex);
       });
     }
+  };
+
+  const handleExport = () => {
+    if (!filteredRows || filteredRows.length === 0) return;
+
+    const csvContent = [
+      columns.map((col) => col.label).join(","),
+      ...filteredRows.map((row) =>
+        columns
+          .map((col) => {
+            const val = row[col.id];
+            const str = String(val ?? "");
+            return str.includes(",") ? `"${str}"` : str;
+          })
+          .join(",")
+      ),
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.setAttribute("download", `Bill_Wise_Report_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
   };
 
   const filteredRows = useMemo(() => {
@@ -170,23 +227,22 @@ export default function BillWiseReport() {
             <Search size={16} />
           </Button>
 
-          {/* Date Dropdown */}
-          <Select>
-            <SelectTrigger
-              className="w-[140px] text-sm border-none bg-[#EBEBEB] text-gray-700 rounded-full 
-                 shadow-sm h-9 focus:ring-0"
-            >
-              <SelectValue placeholder="All dates" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Dates</SelectItem>
-              <SelectItem value="today">Today</SelectItem>
-              <SelectItem value="week">This Week</SelectItem>
-            </SelectContent>
-          </Select>
+          {/* Date Filter Button */}
+          <Button
+            variant="outline"
+            className="rounded-full border-none bg-[#EBEBEB] text-gray-700 shadow-sm h-9 px-4 hover:bg-gray-200 flex items-center gap-2"
+            onClick={() => setDateFilterOpen(true)}
+          >
+            <Calendar size={16} />
+            <span>Date Range</span>
+          </Button>
 
           {/* Export Button */}
-          <Button className="bg-[#E98C81] hover:bg-[#d97b71] text-white rounded-full px-6 h-9 flex items-center gap-2 shadow-sm">
+          <Button
+            onClick={handleExport}
+            disabled={loading || filteredRows.length === 0}
+            className="bg-[#E98C81] hover:bg-[#d97b71] text-white rounded-full px-6 h-9 flex items-center gap-2 shadow-sm"
+          >
             <Download size={16} />
             Export
           </Button>
@@ -284,6 +340,52 @@ export default function BillWiseReport() {
           </div>
         </div>
       </div>
+
+      {/* Date Range Filter Dialog */}
+      <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+        <DialogContent className="w-full max-w-md">
+          <DialogHeader>
+            <DialogTitle>Filter Reports by Date</DialogTitle>
+            <DialogDescription>
+              Select a start and end date to generate reports within that range.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={dateRange.start}
+                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="endDate">End Date</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={dateRange.end}
+                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              className="bg-[#E98C81] hover:bg-[#f48c83]"
+              onClick={handleDateRangeSearch}
+              disabled={loading}
+            >
+              {loading ? "Filtering..." : "Apply Filter"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }
