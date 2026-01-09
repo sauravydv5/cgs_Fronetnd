@@ -21,6 +21,9 @@ export default function SaleRegister() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   const initialColumns = [
     { id: "sno", label: "SNO." },
     { id: "billNo", label: "BILL NO." },
@@ -53,7 +56,19 @@ export default function SaleRegister() {
           response = await getAllReports();
         }
         if (response.success && Array.isArray(response.bills)) {
-          const flattenedData = response.bills.flatMap((bill: any) =>
+          let billsToProcess = response.bills;
+          if (fromDate && toDate) {
+            const start = new Date(fromDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(toDate);
+            end.setHours(23, 59, 59, 999);
+            billsToProcess = billsToProcess.filter((bill: any) => {
+              const billDate = new Date(bill.billDate || bill.date || bill.createdAt);
+              return billDate >= start && billDate <= end;
+            });
+          }
+
+          const flattenedData = billsToProcess.flatMap((bill: any) =>
             (bill.items || []).map((item: any) => ({
               id: item._id || `${bill._id}-${item.productId}`,
               billNo: bill.billNo,
@@ -156,7 +171,14 @@ export default function SaleRegister() {
                 type="date"
                 className="pl-10 pr-4 w-[180px] h-[42px] rounded-lg bg-[#F5F5F5] border border-gray-300 text-gray-700 focus:ring-0 focus:outline-none"
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFromDate(val);
+                  if (toDate && val > toDate) {
+                    setToDate("");
+                  }
+                }}
                 onKeyDown={(e) => e.preventDefault()}
               />
             </div>
@@ -174,6 +196,8 @@ export default function SaleRegister() {
                 type="date"
                 className="pl-10 pr-4 w-[180px] h-[42px] rounded-lg bg-[#F5F5F5] border border-gray-300 text-gray-700 focus:ring-0 focus:outline-none"
                 value={toDate}
+                min={fromDate}
+                max={today}
                 onChange={(e) => setToDate(e.target.value)}
                 onKeyDown={(e) => e.preventDefault()}
               />

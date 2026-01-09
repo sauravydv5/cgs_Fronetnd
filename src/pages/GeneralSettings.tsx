@@ -20,6 +20,9 @@ function GeneralSettings() {
   const [profileImagePreview, setProfileImagePreview] = useState("");
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   useEffect(() => {
     const fetchAndSetProfile = async () => {
       setLoading(true);
@@ -259,6 +262,7 @@ shadow-sm text-center text-4xl font-semibold leading-none"
                   type="date"
                   name="dateofBirth"
                   value={formData.dateofBirth}
+                  max={today}
                   onChange={handleInputChange}
                   onKeyDown={(e) => e.preventDefault()}
                   className="w-full px-4 py-2 border border-black rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-black outline-none"

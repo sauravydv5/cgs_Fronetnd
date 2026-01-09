@@ -245,9 +245,10 @@ export default function ProductManagement() {
 
   const fetchCategories = useCallback(async () => {
     try {
+      // Request a large limit so we get all categories from the server
       // @ts-ignore
-      const res = await getAllCategories({ limit: 1000 });
-      let categoryData = [];
+      const res = await getAllCategories({ limit: 10000 });
+      let categoryData: any[] = [];
 
       if (res?.data?.data?.rows && Array.isArray(res.data.data.rows)) {
         categoryData = res.data.data.rows;
@@ -1148,7 +1149,7 @@ export default function ProductManagement() {
                   <SelectTrigger>
                     <SelectValue placeholder="Select a category" />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="category-select-content max-h-[360px] overflow-y-auto">
                     {categories.filter(c => !c.parent).map(category => (
                       <React.Fragment key={category._id}>
                         <SelectItem value={category._id}>
@@ -1256,7 +1257,7 @@ export default function ProductManagement() {
                 <SelectTrigger>
                   <SelectValue placeholder="Select parent category" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="category-select-content max-h-[360px] overflow-y-auto">
                   {categories
                     .filter((c) => !c.parent)
                     .map((cat) => (

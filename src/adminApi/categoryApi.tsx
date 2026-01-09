@@ -11,7 +11,7 @@ export const addSubCategory = (data: { name: string; description: string; parent
   return adminInstance.post("/categories", data);
 };
 
-// Get all categories
-export const getAllCategories = () => {
-  return adminInstance.get("/categories");
+// Get all categories (supports optional query params like { limit })
+export const getAllCategories = (params?: any) => {
+  return adminInstance.get("/categories", { params });
 };

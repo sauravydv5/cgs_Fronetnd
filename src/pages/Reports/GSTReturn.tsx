@@ -26,6 +26,9 @@ export default function GSTReturn() {
   const [reportDate, setReportDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [gstNumber, setGstNumber] = useState("03AATFC3920N125"); // Placeholder
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   const initialColumns = [
     { id: "sno", label: "SNO." },
     { id: "description", label: "DESCRIPTION" },
@@ -60,7 +63,19 @@ export default function GSTReturn() {
           response = await getAllReports();
         }
         if (response.success && Array.isArray(response.bills)) {
-          const billsData = response.bills;
+          let billsData = response.bills;
+
+          if (reportDate) {
+            const dateObj = new Date(reportDate);
+            const start = startOfMonth(dateObj);
+            start.setHours(0, 0, 0, 0);
+            const end = endOfMonth(dateObj);
+            end.setHours(23, 59, 59, 999);
+            billsData = billsData.filter((bill: any) => {
+              const billDate = new Date(bill.billDate || bill.date || bill.createdAt);
+              return billDate >= start && billDate <= end;
+            });
+          }
 
           // Aggregate sales data for GST Return
           const aggregatedData: { [key: string]: any } = {};
@@ -193,7 +208,9 @@ export default function GSTReturn() {
                 placeholder="DD-MM-YY"
                 className="w-[145px] h-[42px] rounded-[12px] bg-[#EDEDED] border border-gray-200 text-center text-gray-800 font-medium shadow-sm focus-visible:ring-0"
                 value={reportDate}
+                max={today}
                 onChange={(e) => setReportDate(e.target.value)}
+                onKeyDown={(e) => e.preventDefault()}
               />
             </div>
             

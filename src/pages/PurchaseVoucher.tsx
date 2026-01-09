@@ -40,6 +40,9 @@ export default function PurchaseVoucher() {
   const [companies, setCompanies] = useState<string[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   useEffect(() => {
     const fetchDropdownData = async () => {
       try {
@@ -302,6 +305,7 @@ export default function PurchaseVoucher() {
                 type="date"
                 className="bg-white border-0 text-sm h-auto p-0 focus:ring-0"
                 value={voucherData.date}
+                max={today}
                 onChange={(e) => setVoucherData({ ...voucherData, date: e.target.value })}
               />
             </div>

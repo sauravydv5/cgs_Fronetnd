@@ -1,7 +1,7 @@
 import adminInstance from "./adminInstance";
 
 
-export const getAllProducts = () => adminInstance.get('/products');
+export const getAllProducts = (params?: any) => adminInstance.get('/products', { params });
 export const updateProduct = ({id, data}: {id: string, data: any}) => adminInstance.put(`/products/${id}`, data);
 export const getProductById = ({id}) => adminInstance.get(`/products/${id}`);
 export const addProduct = ({data}) => adminInstance.post('/products', data);

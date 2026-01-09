@@ -96,6 +96,9 @@ export default function Customers() {
 
   const itemsPerPage = 8;
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
@@ -711,7 +714,11 @@ export default function Customers() {
                   id="startDate"
                   type="date"
                   value={dateRange.start}
-                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  max={today}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDateRange({ ...dateRange, start: val, end: dateRange.end && val > dateRange.end ? "" : dateRange.end });
+                  }}
                   onKeyDown={(e) => e.preventDefault()}
                 />
               </div>
@@ -721,6 +728,8 @@ export default function Customers() {
                   id="endDate"
                   type="date"
                   value={dateRange.end}
+                  min={dateRange.start}
+                  max={today}
                   onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
                   onKeyDown={(e) => e.preventDefault()}
                 />

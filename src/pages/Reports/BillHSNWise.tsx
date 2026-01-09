@@ -61,6 +61,9 @@ export default function BillHSNWise() {
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   const initialColumns = [
     { id: "sno", label: "SNO." },
     { id: "billDate", label: "BILL DATE" },
@@ -94,8 +97,20 @@ export default function BillHSNWise() {
       }
 
       if (response.success && Array.isArray(response.bills)) {
+        let billsToProcess = response.bills;
+        if (dateRange.start && dateRange.end) {
+          const start = new Date(dateRange.start);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(dateRange.end);
+          end.setHours(23, 59, 59, 999);
+          billsToProcess = billsToProcess.filter((bill: any) => {
+            const billDate = new Date(bill.billDate || bill.date || bill.createdAt);
+            return billDate >= start && billDate <= end;
+          });
+        }
+
         // Flatten items and calculate totals
-        const flattenedItems: BillItem[] = response.bills.flatMap((bill: any) =>
+        const flattenedItems: BillItem[] = billsToProcess.flatMap((bill: any) =>
           (bill.items || []).map((item: any) => {
             const qty = Number(item.qty || 0);
             const taxableAmount = Number(item.taxableAmount || 0);
@@ -402,7 +417,11 @@ export default function BillHSNWise() {
                   id="startDate"
                   type="date"
                   value={dateRange.start}
-                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  max={today}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDateRange({ ...dateRange, start: val, end: dateRange.end && val > dateRange.end ? "" : dateRange.end });
+                  }}
                   onKeyDown={(e) => e.preventDefault()}
                 />
               </div>
@@ -412,6 +431,8 @@ export default function BillHSNWise() {
                   id="endDate"
                   type="date"
                   value={dateRange.end}
+                  min={dateRange.start}
+                  max={today}
                   onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
                   onKeyDown={(e) => e.preventDefault()}
                 />

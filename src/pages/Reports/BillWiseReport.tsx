@@ -65,6 +65,9 @@ export default function BillWiseReport() {
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   const [columns, setColumns] = useState(() => {
     const savedOrder = localStorage.getItem("billWiseReportColumnOrder");
     return savedOrder ? JSON.parse(savedOrder) : initialColumns;
@@ -108,7 +111,18 @@ export default function BillWiseReport() {
     try {
       const response = await getReportsByDateRange(dateRange.start, dateRange.end);
       if (response.success && Array.isArray(response.bills)) {
-        setRows(transformSaleData(response.bills));
+        let billsToProcess = response.bills;
+        if (dateRange.start && dateRange.end) {
+          const start = new Date(dateRange.start);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(dateRange.end);
+          end.setHours(23, 59, 59, 999);
+          billsToProcess = billsToProcess.filter((bill: any) => {
+            const billDate = new Date(bill.billDate || bill.date || bill.createdAt);
+            return billDate >= start && billDate <= end;
+          });
+        }
+        setRows(transformSaleData(billsToProcess));
         setDateFilterOpen(false);
         toast.success("Reports filtered successfully");
       } else {
@@ -357,7 +371,11 @@ export default function BillWiseReport() {
                 id="startDate"
                 type="date"
                 value={dateRange.start}
-                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDateRange({ ...dateRange, start: val, end: dateRange.end && val > dateRange.end ? "" : dateRange.end });
+                }}
                 onKeyDown={(e) => e.preventDefault()}
               />
             </div>
@@ -367,6 +385,8 @@ export default function BillWiseReport() {
                 id="endDate"
                 type="date"
                 value={dateRange.end}
+                min={dateRange.start}
+                max={today}
                 onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
                 onKeyDown={(e) => e.preventDefault()}
               />

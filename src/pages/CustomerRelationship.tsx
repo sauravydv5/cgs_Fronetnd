@@ -92,6 +92,9 @@ export default function CustomerRelationship() {
 
   const itemsPerPage = 8;
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
@@ -464,6 +467,7 @@ export default function CustomerRelationship() {
                         name="dateOfBirth"
                         type="date"
                         value={newCustomer.dateOfBirth}
+                        max={today}
                         onChange={handleInputChange}
                         onKeyDown={(e) => e.preventDefault()}
                         onClick={(e) => e.currentTarget.showPicker()}
@@ -785,7 +789,11 @@ export default function CustomerRelationship() {
                   id="startDate"
                   type="date"
                   value={dateRange.start}
-                  onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                  max={today}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDateRange({ ...dateRange, start: val, end: dateRange.end && val > dateRange.end ? "" : dateRange.end });
+                  }}
                   onKeyDown={(e) => e.preventDefault()}
                   onClick={(e) => e.currentTarget.showPicker()}
                 />
@@ -796,6 +804,8 @@ export default function CustomerRelationship() {
                   id="endDate"
                   type="date"
                   value={dateRange.end}
+                  min={dateRange.start}
+                  max={today}
                   onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
                   onKeyDown={(e) => e.preventDefault()}
                   onClick={(e) => e.currentTarget.showPicker()}

@@ -14,6 +14,9 @@ export default function BillNumber() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   const handleSearch = async () => {
     if (!billNumber.trim()) {
       setError("Please enter a bill number to search.");
@@ -30,7 +33,19 @@ export default function BillNumber() {
         response = await getAllReports();
       }
       if (response.success && Array.isArray(response.bills)) {
-        const foundBill = response.bills.find(
+        let billsToProcess = response.bills;
+        if (fromDate && toDate) {
+          const start = new Date(fromDate);
+          start.setHours(0, 0, 0, 0);
+          const end = new Date(toDate);
+          end.setHours(23, 59, 59, 999);
+          billsToProcess = billsToProcess.filter((bill: any) => {
+            const billDate = new Date(bill.billDate || bill.date || bill.createdAt);
+            return billDate >= start && billDate <= end;
+          });
+        }
+
+        const foundBill = billsToProcess.find(
           (bill: any) => bill.billNo?.toLowerCase().includes(billNumber.trim().toLowerCase())
         );
         if (foundBill) {
@@ -66,7 +81,14 @@ export default function BillNumber() {
                 type="date"
                 className="w-40 h-10 rounded-md bg-[#F4F4F4] pl-8 border border-gray-200 text-gray-600 focus:ring-0"
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFromDate(val);
+                  if (toDate && val > toDate) {
+                    setToDate("");
+                  }
+                }}
                 onKeyDown={(e) => e.preventDefault()}
               />
               <Calendar
@@ -84,6 +106,8 @@ export default function BillNumber() {
                 type="date"
                 className="w-40 h-10 rounded-md bg-[#F4F4F4] pl-8 border border-gray-200 text-gray-600 focus:ring-0"
                 value={toDate}
+                min={fromDate}
+                max={today}
                 onChange={(e) => setToDate(e.target.value)}
                 onKeyDown={(e) => e.preventDefault()}
               />

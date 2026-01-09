@@ -407,6 +407,7 @@ export default function SaleReturn() {
                     selected={dateRange}
                     onSelect={setDateRange}
                     initialFocus
+                    disabled={(date) => date > new Date()}
                   />
                 </PopoverContent>
               {dateRange?.from && dateRange.to && (

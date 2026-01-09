@@ -110,6 +110,9 @@ export default function OrderManagement() {
 
   const itemsPerPage = 10;
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   // Debounce search query
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -797,7 +800,11 @@ export default function OrderManagement() {
                 id="startDate"
                 type="date"
                 value={dateRange.start}
-                onChange={(e) => setDateRange({ ...dateRange, start: e.target.value })}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDateRange({ ...dateRange, start: val, end: dateRange.end && val > dateRange.end ? "" : dateRange.end });
+                }}
                 onKeyDown={(e) => e.preventDefault()}
               />
             </div>
@@ -807,7 +814,12 @@ export default function OrderManagement() {
                 id="endDate"
                 type="date"
                 value={dateRange.end}
-                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                min={dateRange.start}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDateRange({ ...dateRange, end: val });
+                }}
                 onKeyDown={(e) => e.preventDefault()}
               />
             </div>

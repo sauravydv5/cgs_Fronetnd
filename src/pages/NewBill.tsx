@@ -113,18 +113,35 @@ export default function NewBill() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await getAllProducts();
-        if (
-          response.data &&
-          response.data.data &&
-          Array.isArray(response.data.data.rows)
+        // Request a large limit so the UI can show all product item codes (allow user to scroll)
+        const response = await getAllProducts({ limit: 10000 });
+
+        // Support multiple response shapes from API (rows, products, data array, etc.)
+        let productData: any[] = [];
+
+        if (response?.data?.data?.rows && Array.isArray(response.data.data.rows)) {
+          productData = response.data.data.rows;
+        } else if (
+          response?.data?.data?.products &&
+          Array.isArray(response.data.data.products)
         ) {
-          setProducts(response.data.data.rows);
+          productData = response.data.data.products;
+        } else if (response?.data?.rows && Array.isArray(response.data.rows)) {
+          productData = response.data.rows;
+        } else if (response?.data?.products && Array.isArray(response.data.products)) {
+          productData = response.data.products;
+        } else if (response?.data?.data && Array.isArray(response.data.data)) {
+          productData = response.data.data;
+        } else if (Array.isArray(response?.data)) {
+          productData = response.data;
         } else {
-          console.error("Invalid product data structure:", response.data);
+          console.error("Invalid product data structure:", response?.data);
           toast.error("Could not load product list.");
         }
+
+        setProducts(productData);
       } catch (error) {
+        console.error("Failed to fetch products:", error);
         toast.error("Failed to fetch products.");
       }
     };
@@ -223,6 +240,34 @@ export default function NewBill() {
       JSON.stringify(columns)
     );
   }, [columns]);
+
+  useEffect(() => {
+    // When a product popover is open, redirect page wheel scrolling to the popover
+    if (openPopoverIndex === null) return;
+
+    const selector = `.product-popover-content[data-row-index="${openPopoverIndex}"]`;
+
+    const onWheel = (e: WheelEvent) => {
+      const pop = document.querySelector(selector) as HTMLElement | null;
+      if (!pop) return;
+
+      const delta = e.deltaY;
+      const atTop = pop.scrollTop === 0;
+      const atBottom = Math.abs(pop.scrollHeight - pop.clientHeight - pop.scrollTop) <= 1;
+
+      // If popover cannot scroll further in the direction, allow the page to scroll
+      if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
+        return;
+      }
+
+      // Otherwise prevent page scroll and scroll the popover
+      e.preventDefault();
+      pop.scrollTop += delta;
+    };
+
+    window.addEventListener("wheel", onWheel, { passive: false });
+    return () => window.removeEventListener("wheel", onWheel as EventListener);
+  }, [openPopoverIndex]);
 
   const SortableHeader = ({
     column,
@@ -891,7 +936,7 @@ export default function NewBill() {
                             readOnly
                           />
                         </PopoverTrigger>
-                        <PopoverContent className="w-[200px] p-0">
+                        <PopoverContent className="w-[320px] max-h-[360px] p-0 overflow-y-auto product-popover-content" data-row-index={i}>
                           <Command>
                             <CommandInput placeholder="Search item code..." />
                             <CommandEmpty>No product found.</CommandEmpty>

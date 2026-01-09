@@ -44,6 +44,9 @@ export default function SaleTaxRegister() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
   const [columns, setColumns] = useState(() => {
     const savedOrder = localStorage.getItem("saleTaxRegisterColumnOrder");
     return savedOrder ? JSON.parse(savedOrder) : initialColumns;
@@ -61,7 +64,18 @@ export default function SaleTaxRegister() {
           response = await getAllReports();
         }
         if (response.success && Array.isArray(response.bills)) {
-          const billsData = response.bills;
+          let billsData = response.bills;
+
+          if (fromDate && toDate) {
+            const start = new Date(fromDate);
+            start.setHours(0, 0, 0, 0);
+            const end = new Date(toDate);
+            end.setHours(23, 59, 59, 999);
+            billsData = billsData.filter((bill: any) => {
+              const billDate = new Date(bill.billDate || bill.date || bill.createdAt);
+              return billDate >= start && billDate <= end;
+            });
+          }
 
           // Transform API data to fit the table row structure
           const transformedRows = billsData.map((bill: any, index: number) => {
@@ -239,7 +253,14 @@ export default function SaleTaxRegister() {
                 type="date"
                 className="border-none bg-transparent focus-visible:ring-0 text-sm text-gray-700"
                 value={fromDate}
-                onChange={(e) => setFromDate(e.target.value)}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setFromDate(val);
+                  if (toDate && val > toDate) {
+                    setToDate("");
+                  }
+                }}
                 onKeyDown={(e) => e.preventDefault()}
               />
             </div>
@@ -254,6 +275,8 @@ export default function SaleTaxRegister() {
                 type="date"
                 className="border-none bg-transparent focus-visible:ring-0 text-sm text-gray-700"
                 value={toDate}
+                min={fromDate}
+                max={today}
                 onChange={(e) => setToDate(e.target.value)}
                 onKeyDown={(e) => e.preventDefault()}
               />
