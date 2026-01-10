@@ -5,7 +5,7 @@ export const addCustomer = (data: any) =>
   adminInstance.post("/customers", data);
 
 // Get all customers
-export const getAllCustomers = () => adminInstance.get("/customers");
+export const getAllCustomers = (params?: any) => adminInstance.get("/customers", { params });
 export const getCustomers = getAllCustomers;
 
 // Filter customers by rating
@@ -23,3 +23,7 @@ export const deleteCustomer = (customerId: string) =>
 // Update customer status by ID
 export const updateCustomerStatus = (customerId: string, isBlocked: boolean) =>
   adminInstance.patch(`/customers/${customerId}/status`, { status: isBlocked });
+
+// Update customer rating by ID
+export const updateCustomerRating = (customerId: string, rating: number) =>
+  adminInstance.patch(`/customers/${customerId}/rating`, { rating });

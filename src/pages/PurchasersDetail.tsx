@@ -203,21 +203,6 @@ export default function PurchasersDetail() {
 
   const handleFormSubmit = async () => {
     const errors: Partial<Record<keyof typeof newSupplier, string>> = {};
-    const requiredFields: (keyof typeof newSupplier)[] = [
-      "supplierName",
-      "mobileNumber",
-      "email",
-      "companyName",
-      "city",
-      "state",
-      "address",
-    ];
-
-    requiredFields.forEach(field => {
-      if (!newSupplier[field]) {
-        errors[field] = "This field is required.";
-      }
-    });
 
     // Phone number specific validation
     if (newSupplier.mobileNumber && !/^\d{10}$/.test(newSupplier.mobileNumber)) {
@@ -227,7 +212,7 @@ export default function PurchasersDetail() {
     setFormErrors(errors);
 
     if (Object.keys(errors).length > 0) {
-      toast.error("Please fill all the required fields.");
+      toast.error("Please fix the errors.");
       return;
     }
 
@@ -512,37 +497,37 @@ export default function PurchasersDetail() {
         {/* Inputs */}
         <div className="space-y-3">
           <div>
-            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Name<span className="text-red-500">*</span></label>
+            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Name</label>
             <Input name="supplierName" value={newSupplier.supplierName} onChange={handleInputChange} placeholder="Name" className="h-9" />
             {formErrors.supplierName && <span className="text-red-500 text-xs ml-1">{formErrors.supplierName}</span>}
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Mobile Number<span className="text-red-500">*</span></label>
+            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Mobile Number</label>
             <Input name="mobileNumber" value={newSupplier.mobileNumber} onChange={handleInputChange} placeholder="Mobile Number"  />
             {formErrors.mobileNumber && <span className="text-red-500 text-xs ml-1">{formErrors.mobileNumber}</span>}
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Email<span className="text-red-500">*</span></label>
+            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Email</label>
             <Input name="email" value={newSupplier.email} onChange={handleInputChange} placeholder="Email" className="h-9" />
             {formErrors.email && <span className="text-red-500 text-xs ml-1">{formErrors.email}</span>}
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Company Name<span className="text-red-500">*</span></label>
+            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Company Name</label>
             <Input name="companyName" value={newSupplier.companyName} onChange={handleInputChange} placeholder="Company Name" className="h-9" />
             {formErrors.companyName && <span className="text-red-500 text-xs ml-1">{formErrors.companyName}</span>}
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">City<span className="text-red-500">*</span></label>
+            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">City</label>
             <Input name="city" value={newSupplier.city} onChange={handleInputChange} placeholder="City" className="h-9" />
             {formErrors.city && <span className="text-red-500 text-xs ml-1">{formErrors.city}</span>}
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">State<span className="text-red-500">*</span></label>
+            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">State</label>
             <Input name="state" value={newSupplier.state} onChange={handleInputChange} placeholder="State" className="h-9" />
             {formErrors.state && <span className="text-red-500 text-xs ml-1">{formErrors.state}</span>}
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Complete Address<span className="text-red-500">*</span></label>
+            <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Complete Address</label>
             <Input name="address" value={newSupplier.address} onChange={handleInputChange} placeholder="Complete Address" className="h-9" />
             {formErrors.address && <span className="text-red-500 text-xs ml-1">{formErrors.address}</span>}
           </div>

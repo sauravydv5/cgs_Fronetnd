@@ -649,7 +649,7 @@ export default function NewBill() {
               </div>
 
               <Button
-                onClick={() => navigate("/products")}
+                onClick={handleCreateNewBillForCustomer}
                 className="bg-[#E57373] hover:bg-[#d75a5a] text-white rounded-full px-6 py-2 shadow-md whitespace-nowrap"
               >
                 Add Product

@@ -8,6 +8,7 @@ import {
   addCustomer,
   getCustomersByRating,
   getCustomersByDateRange,
+  updateCustomerRating,
 } from "@/adminApi/customerApi";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ import {
   Trash2,
   Ban,
   CalendarDays,
+  Star,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -33,14 +35,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Drawer,
-  DrawerContent,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerFooter,
-  DrawerClose,
-  DrawerTrigger,
-} from "@/components/ui/drawer";
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+  SheetClose,
+  SheetTrigger,
+} from "@/components/ui/sheet";
 import {
   Select,
   SelectTrigger,
@@ -88,6 +90,7 @@ export default function Customers() {
     phoneNumber: "",
     email: "",
     customerCode: "",
+    gender: "",
     dateOfBirth: "",
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -102,7 +105,7 @@ export default function Customers() {
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await getCustomers();
+      const response = await getCustomers({ limit: 10000 });
       if (response.data && response.data.status) {
         const reversedCustomers = response.data.data.customers.reverse();
         const formattedCustomers = reversedCustomers.map((customer, index) => ({
@@ -119,6 +122,7 @@ export default function Customers() {
           anniversary: customer.anniversary || "N/A",
           gender: customer.gender || "N/A",
           scoreCode: "N/A",
+          rating: customer.rating || 0,
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
@@ -137,7 +141,7 @@ export default function Customers() {
       setCurrentPage(1); // Reset to the first page on new filter
       const response =
         rating === null
-          ? await getCustomers()
+          ? await getCustomers({ limit: 10000 })
           : await getCustomersByRating(rating);
 
       if (response.data && response.data.status) {
@@ -157,6 +161,7 @@ export default function Customers() {
           anniversary: customer.anniversary || "N/A",
           gender: customer.gender || "N/A",
           scoreCode: "SC-102",
+          rating: customer.rating || 0,
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
@@ -193,6 +198,7 @@ export default function Customers() {
               : "N/A",
           phone: customer.phoneNumber,
           email: customer.email,
+          rating: customer.rating || 0,
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
@@ -240,6 +246,22 @@ export default function Customers() {
     [customers]
   );
 
+  const handleRatingUpdate = async (customerId: string, newRating: number) => {
+    try {
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.id === customerId ? { ...c, rating: newRating } : c
+        )
+      );
+      await updateCustomerRating(customerId, newRating);
+      toast.success("Rating updated successfully");
+    } catch (error) {
+      console.error("Failed to update rating:", error);
+      toast.error("Failed to update rating");
+      fetchCustomers();
+    }
+  };
+
   const handleUpdateStatus = useCallback(
     async (customerId: string, shouldBlock: boolean) => {
       const action = shouldBlock ? "block" : "unblock";
@@ -281,18 +303,8 @@ export default function Customers() {
   };
 
   const handleAddCustomer = async () => {
-    // Basic validation
-    if (
-      !newCustomer.firstName ||
-      !newCustomer.phoneNumber ||
-      !newCustomer.email
-    ) {
-      toast.warning("Please fill in First Name, Mobile Number, and Email.");
-      return;
-    }
-
     // Email validation for '@'
-    if (!newCustomer.email.includes("@")) {
+    if (newCustomer.email && !newCustomer.email.includes("@")) {
       toast.warning("Please enter a valid email address.");
       return;
     }
@@ -307,6 +319,7 @@ export default function Customers() {
         phoneNumber: newCustomer.phoneNumber,
         customerCode: newCustomer.customerCode,
         dateOfBirth: newCustomer.dateOfBirth, // Matching payload key
+        gender: newCustomer.gender,
         password: "SecurePass123", // Using default password as per payload example, consider making this dynamic or more secure
         profilePic: "https://example.com/profile.jpg", // Using default profile pic as per payload example, consider making this dynamic
       };
@@ -320,6 +333,7 @@ export default function Customers() {
         phoneNumber: "",
         email: "",
         customerCode: "",
+        gender: "",
         dateOfBirth: "",
       });
       fetchCustomers(); // Refetch customers to show the new one
@@ -415,9 +429,9 @@ export default function Customers() {
             </div>
           </div>
 
-          {/* Add Customer Drawer */}
-          <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-            <DrawerTrigger asChild>
+          {/* Add Customer Sheet */}
+          <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+            <SheetTrigger asChild>
               <Button
                 className="rounded-full bg-[#E98C81] hover:bg-[#d97a71] text-white px-5 w-full sm:w-auto"
                 onClick={() => {
@@ -427,15 +441,15 @@ export default function Customers() {
               >
                 + Add Customer
               </Button>
-            </DrawerTrigger>
+            </SheetTrigger>
 
-            <DrawerContent className="fixed top-0 left-0 h-screen/10 w-full max-w-md bg-white shadow-2xl">
+            <SheetContent side="right" className="w-full max-w-md bg-white shadow-2xl p-0">
               <div className="flex flex-col h-full">
-                <DrawerHeader className="border-b px-6 py-5">
-                  <DrawerTitle className="text-xl font-semibold text-gray-900">
+                <SheetHeader className="border-b px-6 py-5">
+                  <SheetTitle className="text-xl font-semibold text-gray-900">
                     Add Customer
-                  </DrawerTitle>
-                </DrawerHeader>
+                  </SheetTitle>
+                </SheetHeader>
 
                 <div className="flex-1 overflow-y-auto px-6 py-6">
                   <div className="space-y-5">
@@ -450,7 +464,7 @@ export default function Customers() {
                       name="firstName"
                       value={newCustomer.firstName}
                       onChange={handleInputChange}
-                      placeholder="First Name *"
+                      placeholder="First Name"
                       className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
                     />
                     <Input
@@ -470,7 +484,7 @@ export default function Customers() {
                           handleInputChange(e);
                         }
                       }}
-                      placeholder="Mobile Number *"
+                      placeholder="Mobile Number"
                       className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
                     />
                     <Input
@@ -478,9 +492,23 @@ export default function Customers() {
                       type="email"
                       value={newCustomer.email}
                       onChange={handleInputChange}
-                      placeholder="Email *"
+                      placeholder="Email"
                       className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
                     />
+                    <Select
+                      value={newCustomer.gender}
+                      onValueChange={(value) =>
+                        setNewCustomer((prev) => ({ ...prev, gender: value }))
+                      }
+                    >
+                      <SelectTrigger className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600">
+                        <SelectValue placeholder="Select Gender" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Male">Male</SelectItem>
+                        <SelectItem value="Female">Female</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <div className="relative">
                       <Input
                         name="dateOfBirth"
@@ -521,10 +549,10 @@ export default function Customers() {
                   </div>
                 </div>
 
-                <DrawerFooter className="px-6 py-6 space-y-3"></DrawerFooter>
+                <SheetFooter className="px-6 py-6 space-y-3"></SheetFooter>
               </div>
-            </DrawerContent>
-          </Drawer>
+            </SheetContent>
+          </Sheet>
         </div>
 
         {/* Table */}
@@ -564,7 +592,26 @@ export default function Customers() {
                       }}
                     >
                       <td className="px-4 sm:px-6 py-3">{customer.sno}</td>
-                      <td className="px-4 sm:px-6 py-3">{customer.name}</td>
+                      <td className="px-4 sm:px-6 py-3">
+                        <div className="flex flex-col">
+                          <span className="font-medium">{customer.name}</span>
+                          <div className="flex items-center mt-1 space-x-0.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleRatingUpdate(customer.id, i + 1);
+                                }}
+                                className={cn(
+                                  "w-3 h-3 cursor-pointer hover:scale-125 transition-transform",
+                                  i < Math.round(customer.rating || 0) ? "text-yellow-400 fill-yellow-400" : "text-gray-300"
+                                )}
+                              />
+                            ))}
+                          </div>
+                        </div>
+                      </td>
                       <td className="px-4 sm:px-6 py-3">{customer.phone}</td>
                       {/* <td className="px-4 sm:px-6 py-3">
                         {customer.scoreCode}

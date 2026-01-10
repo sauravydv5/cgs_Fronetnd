@@ -91,15 +91,21 @@ export function AppSidebar() {
                               )
                             }
                           >
-                            <div className="flex flex-row gap-2 hover:bg-[#FFFFFF] rounded-[20px] ">
-                            <Icon size={27} className="flex-shrink-0" />
-                            {open && (
-                              <span className="text-[20px] font-bold leading-none">
-                                {item.name}
-                              </span>
+                            {({ isActive }) => (
+                              <div className="flex flex-row gap-2 hover:bg-[#FFFFFF] rounded-[20px] ">
+                                <Icon size={27} className="flex-shrink-0" />
+                                {open && (
+                                  <span
+                                    className={cn(
+                                      "text-[20px] leading-none",
+                                      isActive ? "font-bold" : "font-medium"
+                                    )}
+                                  >
+                                    {item.name}
+                                  </span>
+                                )}
+                              </div>
                             )}
-                            </div>
-                            
                           </NavLink>
                         </TooltipTrigger>
 

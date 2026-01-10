@@ -14,8 +14,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Pencil, Trash2, FileClock, GripVertical, Search } from "lucide-react";
-import { getBillDrafts, updateBillPaymentStatus } from "@/adminApi/billApi";
+import { Pencil, Trash2, FileClock, GripVertical, Search, CircleUser, User, CalendarDays, BadgeIndianRupee, Hash, Percent } from "lucide-react";
+import { getAllNewBills, updateBillPaymentStatus } from "@/adminApi/billApi";
 import { format } from "date-fns";
 import {
   Select,
@@ -85,7 +85,7 @@ const SortableHeaderCell = ({ column }: { column: any }) => {
   );
 };
 
-const SortableRow = ({ bill, columns, onStatusChange }: { bill: any; columns: any[]; onStatusChange: (id: string, status: string) => void }) => {
+const SortableRow = ({ bill, columns, onStatusChange, onClick }: { bill: any; columns: any[]; onStatusChange: (id: string, status: string) => void; onClick: (bill: any) => void }) => {
   const {
     attributes,
     listeners,
@@ -106,7 +106,8 @@ const SortableRow = ({ bill, columns, onStatusChange }: { bill: any; columns: an
     <TableRow
       ref={setNodeRef}
       style={style}
-      className={isDragging ? "bg-blue-50 shadow-md" : "hover:bg-gray-50"}
+      className={`cursor-pointer ${isDragging ? "bg-blue-50 shadow-md" : "hover:bg-gray-50"}`}
+      onClick={() => onClick(bill)}
     >
       {columns.map((col) => {
         if (col.id === "drag") {
@@ -125,6 +126,7 @@ const SortableRow = ({ bill, columns, onStatusChange }: { bill: any; columns: an
         if (col.id === "status") {
           return (
             <TableCell key={col.id} className="text-center">
+              <div onClick={(e) => e.stopPropagation()}>
               <Select
                 value={bill.status || "Draft"}
                 onValueChange={(value) => onStatusChange(bill.id, value)}
@@ -139,6 +141,7 @@ const SortableRow = ({ bill, columns, onStatusChange }: { bill: any; columns: an
                   <SelectItem value="Draft">Draft</SelectItem>
                 </SelectContent>
               </Select>
+              </div>
             </TableCell>
           );
         }
@@ -163,6 +166,7 @@ function BillDrafts() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusConfirmationOpen, setStatusConfirmationOpen] = useState(false);
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{ billId: string; status: string } | null>(null);
+  const [selectedBill, setSelectedBill] = useState<any | null>(null);
 
   useEffect(() => {
     localStorage.setItem("billDraftsColumns_v3", JSON.stringify(columns));
@@ -172,7 +176,7 @@ function BillDrafts() {
     const fetchDrafts = async () => {
       try {
         setLoading(true);
-        const response = await getBillDrafts();
+        const response = await getAllNewBills();
         
         // Handle different response structures
         let data = [];
@@ -184,7 +188,13 @@ function BillDrafts() {
           data = response.bills;
         }
 
-        const formattedBills = data.map((bill: any) => ({
+        // Filter for Draft and Unpaid
+        const filteredData = data.filter((bill: any) => {
+            const status = bill.paymentStatus || bill.status || "Draft";
+            return status === "Draft" || status === "Unpaid";
+        });
+
+        const formattedBills = filteredData.map((bill: any) => ({
           id: bill._id, // Unique ID for DnD
           billNo: bill.billNo || "N/A",
           customer: bill.customerName || bill.customerId?.firstName || "Unknown",
@@ -193,6 +203,14 @@ function BillDrafts() {
           status: bill.paymentStatus || "Draft",
           customerId: bill.customerId?._id || bill.customerId,
           customerName: bill.customerName || bill.customerId?.firstName || "Unknown",
+          // Details for modal
+          items: bill.items || [],
+          discount: bill.totalDiscount || 0,
+          sgst: bill.totalSGST || 0,
+          cgst: bill.totalCGST || 0,
+          grandTotal: bill.netAmount || bill.totalAmount || bill.grandTotal || 0,
+          taxableAmount: bill.taxableAmount || 0,
+          agentName: bill.agentName || "N/A",
         }));
 
         setBills(formattedBills);
@@ -255,7 +273,7 @@ function BillDrafts() {
     try {
       await updateBillPaymentStatus(billId, status);
       toast.success("Payment status updated");
-      if (status !== 'Draft') {
+      if (status !== 'Draft' && status !== 'Unpaid') {
         const updatedBill = bills.find(b => b.id === billId);
         if (updatedBill && updatedBill.customerId) {
           navigate(`/bills/new-bill?customerId=${updatedBill.customerId}`, {
@@ -333,7 +351,7 @@ function BillDrafts() {
                     </TableRow>
                   ) : filteredBills.length > 0 ? (
                     filteredBills.map((bill) => (
-                      <SortableRow key={bill.id} bill={bill} columns={columns} onStatusChange={initiatePaymentStatusChange} />
+                      <SortableRow key={bill.id} bill={bill} columns={columns} onStatusChange={initiatePaymentStatusChange} onClick={setSelectedBill} />
                     ))
                   ) : (
                     <TableRow>
@@ -365,6 +383,106 @@ function BillDrafts() {
               <Button variant="outline" onClick={() => setStatusConfirmationOpen(false)}>Cancel</Button>
               <Button onClick={confirmPaymentStatusChange} className="bg-[#E98C81] hover:bg-[#d37b70] text-white">Confirm</Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* === Bill Details Modal === */}
+        <Dialog open={!!selectedBill} onOpenChange={() => setSelectedBill(null)}>
+          <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto bg-white p-0 shadow-2xl">
+            <DialogHeader className="bg-gradient-to-br from-[#f97a63] via-[#f86a53] to-[#f75943] text-white p-5 rounded-t-lg relative overflow-hidden flex flex-col items-start">
+              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
+              <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
+              <div className="relative z-10">
+                <DialogTitle className="text-2xl font-extrabold tracking-tight mb-1">
+                  Bill Details
+                </DialogTitle>
+                <span className="bg-white text-[#f97a63] text-sm font-bold px-7 py-1.5 rounded-full shadow-lg">
+                  #{selectedBill?.billNo}
+                </span>
+              </div>
+            </DialogHeader>
+            {selectedBill && (
+              <div className="p-6">
+                {/* Main Info Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-lg p-3 border border-purple-200/50 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="bg-purple-500 rounded-lg p-2">
+                        <User className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide">Customer Name</p>
+                        <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedBill.customerName}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-lg p-3 border border-orange-200/50 shadow-sm hover:shadow-md transition-all">
+                    <div className="flex items-center space-x-2.5">
+                      <div className="bg-orange-500 rounded-lg p-2">
+                        <CalendarDays className="h-4 w-4 text-white" />
+                      </div>
+                      <div className="flex-1">
+                        <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Bill Date</p>
+                        <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedBill.date}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Order Items Section */}
+                <div className="bg-white rounded-lg border border-gray-200 mb-5 overflow-hidden">
+                  <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
+                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center">
+                      <Hash className="h-3.5 w-3.5 mr-1.5 text-gray-600" />
+                      Order Items
+                    </h3>
+                  </div>
+                  <div className="max-h-60 overflow-y-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-gray-50 text-gray-500 font-medium text-xs uppercase sticky top-0">
+                        <tr>
+                          <th className="px-4 py-2">Item Name</th>
+                          <th className="px-4 py-2 text-center">Qty</th>
+                          <th className="px-4 py-2 text-right">Rate</th>
+                          <th className="px-4 py-2 text-right">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100">
+                        {selectedBill.items && selectedBill.items.length > 0 ? (
+                          selectedBill.items.map((item: any, index: number) => (
+                            <tr key={index} className="hover:bg-gray-50/50">
+                              <td className="px-4 py-2">
+                                <p className="font-medium text-gray-800">{item.itemName || item.productName || "N/A"}</p>
+                                <p className="text-xs text-gray-500">{item.itemCode || ""}</p>
+                              </td>
+                              <td className="px-4 py-2 text-center">{item.qty}</td>
+                              <td className="px-4 py-2 text-right">₹{item.rate || item.mrp || 0}</td>
+                              <td className="px-4 py-2 text-right font-medium">₹{item.total || item.netAmount || 0}</td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan={4} className="px-4 py-4 text-center text-gray-500">No items found</td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Amount Summary Section */}
+                <div className="bg-gradient-to-br from-[#fff4f1] via-orange-50 to-orange-100 rounded-xl p-4 border-2 border-orange-200 shadow-lg">
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center space-x-2">
+                      <BadgeIndianRupee className="h-5 w-5 text-[#f97a63]" />
+                      <p className="text-sm font-bold text-gray-700 uppercase tracking-wide">Total Amount</p>
+                    </div>
+                    <p className="text-2xl font-extrabold text-[#f97a63] tracking-tight">{selectedBill.total}</p>
+                  </div>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       </div>
