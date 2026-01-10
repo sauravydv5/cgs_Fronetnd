@@ -1,7 +1,11 @@
-import { ReactNode } from "react";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { ReactNode, useEffect, useState } from "react";
+import {
+  Avatar,
+  AvatarFallback,
+  AvatarImage,
+} from "@/components/ui/avatar";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
-import { Menu, Bell } from "lucide-react";
+import { Menu } from "lucide-react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -12,7 +16,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { AppSidebar } from "@/components/AppSidebar";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
 
 interface AdminLayoutProps {
   children: ReactNode;
@@ -22,10 +25,39 @@ interface AdminLayoutProps {
 export function AdminLayout({ children, title }: AdminLayoutProps) {
   const navigate = useNavigate();
 
+  const [profilePic, setProfilePic] = useState<string>("");
+  const [initials, setInitials] = useState<string>("AD");
+
   const handleLogout = () => {
     localStorage.removeItem("authToken");
+    localStorage.removeItem("adminProfile");
     navigate("/login");
   };
+
+  // 🔥 Read profile image from localStorage
+  useEffect(() => {
+    const loadProfile = () => {
+      const profile = localStorage.getItem("adminProfile");
+      if (profile) {
+        const parsed = JSON.parse(profile);
+
+        setProfilePic(
+          parsed.profilePicture || parsed.profilePic || ""
+        );
+
+        const first = parsed.firstName?.charAt(0) || "A";
+        const last = parsed.lastName?.charAt(0) || "D";
+        setInitials(`${first}${last}`);
+      }
+    };
+
+    loadProfile();
+
+    // 🔁 Listen for instant updates from profile page
+    window.addEventListener("profile-updated", loadProfile);
+    return () =>
+      window.removeEventListener("profile-updated", loadProfile);
+  }, []);
 
   return (
     <SidebarProvider>
@@ -44,39 +76,27 @@ export function AdminLayout({ children, title }: AdminLayoutProps) {
               <h1 className="text-2xl font-bold">{title}</h1>
             </div>
 
-            {/* Right Section - Notification + Profile */}
+            {/* Right Section */}
             <div className="flex items-center gap-4">
-              {/* Notification Bell */}
-              {/* <div className="relative">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className="rounded-full border-gray-300 hover:bg-gray-100"
-                >
-                  <Bell className="w-5 h-5 text-gray-700" />
-                </Button>
-                <span className="absolute top-2 right-2 block h-2 w-2 rounded-full bg-blue-500"></span>
-              </div> */}
-
               {/* Profile Dropdown */}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Avatar className="cursor-pointer">
-                    <AvatarFallback>AD</AvatarFallback>
+                    {profilePic ? (
+                      <AvatarImage src={profilePic} alt="Admin" />
+                    ) : (
+                      <AvatarFallback>{initials}</AvatarFallback>
+                    )}
                   </Avatar>
                 </DropdownMenuTrigger>
 
                 <DropdownMenuContent align="end" className="w-48">
                   <DropdownMenuLabel>My Account</DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => navigate("/profile")}
-                  >
+                  <DropdownMenuItem onClick={() => navigate("/profile")}>
                     Profile
                   </DropdownMenuItem>
-                  <DropdownMenuItem
-                    onClick={() => navigate("/settings")}
-                  >
+                  <DropdownMenuItem onClick={() => navigate("/settings")}>
                     Settings
                   </DropdownMenuItem>
                   <DropdownMenuItem

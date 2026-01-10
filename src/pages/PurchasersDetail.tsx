@@ -36,6 +36,7 @@ import { Label } from "@/components/ui/label";
 
 export default function PurchasersDetail() {
   const [suppliers, setSuppliers] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
   const initialColumns = [
     { id: "contact", label: "CONTACT" },
     { id: "supplierId", label: "SUPPLIER ID" },
@@ -108,13 +109,17 @@ export default function PurchasersDetail() {
 
       // Update validation message based on the length of the number
       if (truncatedValue.length > 0 && truncatedValue.length < 10) {
-        setFormErrors((prev) => ({ ...prev, mobile: "Phone number must be 10 digits." }));
+        setFormErrors((prev) => ({ ...prev, mobileNumber: "Phone number must be 10 digits." }));
       } else {
-        setFormErrors((prev) => ({ ...prev, mobile: undefined }));
+        setFormErrors((prev) => ({ ...prev, mobileNumber: undefined }));
       }
     } else {
       // For all other fields
       setNewSupplier((prev) => ({ ...prev, [name]: value }));
+      // Clear error when user types
+      if (formErrors[name as keyof typeof newSupplier]) {
+        setFormErrors((prev) => ({ ...prev, [name]: undefined }));
+      }
     }
   };
 
@@ -296,6 +301,12 @@ export default function PurchasersDetail() {
     }
   };
 
+  const handleClearFilter = () => {
+    setDateRange({ start: "", end: "" });
+    setDateFilterOpen(false);
+    fetchSuppliers();
+  };
+
   const filteredSuppliers = suppliers.filter(supplier => {
     const query = searchQuery.toLowerCase();
     if (!query) return true;
@@ -305,6 +316,12 @@ export default function PurchasersDetail() {
       (supplier.companyName && supplier.companyName.toLowerCase().includes(query))
     );
   });
+
+  const itemsPerPage = 10;
+  const totalPages = Math.ceil(filteredSuppliers.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredSuppliers.length);
+  const currentSuppliers = filteredSuppliers.slice(startIndex, endIndex);
 
   return (
     <AdminLayout title="Purchasers Detail">
@@ -317,7 +334,10 @@ export default function PurchasersDetail() {
               placeholder="Search by ID, Supplier Name, Company"
               className="w-80 h-10 rounded-full border border-gray-300"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <Button className="rounded-full px-3 py-2 bg-[#ff8573] hover:bg-[#e47a69]">
               <Search size={18} className="text-white" />
@@ -415,39 +435,61 @@ export default function PurchasersDetail() {
                   </DndContext>
                 </thead>
                 <tbody>
-                  {filteredSuppliers.map((row) => (
-                    <tr key={row._id} className="border-b hover:bg-[#fff6f5] transition-colors">
-                      {columns.map((col) => renderCell(row, col.id))}
+                  {currentSuppliers.length > 0 ? (
+                    currentSuppliers.map((row) => (
+                      <tr key={row._id} className="border-b hover:bg-[#fff6f5] transition-colors">
+                        {columns.map((col) => renderCell(row, col.id))}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr>
+                      <td colSpan={columns.length} className="text-center py-10">No suppliers found.</td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
           );
         })()}
 
-        {/* Pagination */}
-        <div className="flex items-center justify-center gap-2 mt-5">
-          <button className="px-2 py-1 text-sm text-gray-500 hover:text-gray-800" disabled>
-            &lt;
-          </button>
-          <button className="px-3 py-1 rounded-full bg-[#ff8573] text-white text-sm">
-            1
-          </button>
-          <button className="px-3 py-1 text-sm text-gray-600 hover:text-[#ff8573]" disabled>
-            2
-          </button>
-          <button className="px-3 py-1 text-sm text-gray-600 hover:text-[#ff8573]">
-            3
-          </button>
-          <span className="text-sm text-gray-400">...</span>
-          <button className="px-3 py-1 text-sm text-gray-600 hover:text-[#ff8573]">
-            56
-          </button>
-          <button className="px-2 py-1 text-sm text-gray-500 hover:text-gray-800">
-            &gt;
-          </button>
-        </div>
+        {filteredSuppliers.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t bg-gray-50 gap-3 rounded-b-lg mt-4">
+            <div className="text-xs sm:text-sm text-gray-600">
+              Showing {startIndex + 1} to {endIndex} of {filteredSuppliers.length} entries
+            </div>
+            <div className="flex gap-1 flex-wrap justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="h-8 text-xs"
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalPages }).map((_, i) => (
+                <Button
+                  key={i + 1}
+                  variant={currentPage === i + 1 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`h-8 w-8 p-0 text-xs ${currentPage === i + 1 ? "bg-[#ff8573] hover:bg-[#e47a69] text-white border-[#ff8573]" : ""}`}
+                >
+                  {i + 1}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="h-8 text-xs"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/*RIGHT SIDE MODAL*/}
@@ -472,37 +514,37 @@ export default function PurchasersDetail() {
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Name<span className="text-red-500">*</span></label>
             <Input name="supplierName" value={newSupplier.supplierName} onChange={handleInputChange} placeholder="Name" className="h-9" />
-            
+            {formErrors.supplierName && <span className="text-red-500 text-xs ml-1">{formErrors.supplierName}</span>}
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Mobile Number<span className="text-red-500">*</span></label>
             <Input name="mobileNumber" value={newSupplier.mobileNumber} onChange={handleInputChange} placeholder="Mobile Number"  />
-            
+            {formErrors.mobileNumber && <span className="text-red-500 text-xs ml-1">{formErrors.mobileNumber}</span>}
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Email<span className="text-red-500">*</span></label>
             <Input name="email" value={newSupplier.email} onChange={handleInputChange} placeholder="Email" className="h-9" />
-            
+            {formErrors.email && <span className="text-red-500 text-xs ml-1">{formErrors.email}</span>}
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Company Name<span className="text-red-500">*</span></label>
             <Input name="companyName" value={newSupplier.companyName} onChange={handleInputChange} placeholder="Company Name" className="h-9" />
-            
+            {formErrors.companyName && <span className="text-red-500 text-xs ml-1">{formErrors.companyName}</span>}
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">City<span className="text-red-500">*</span></label>
             <Input name="city" value={newSupplier.city} onChange={handleInputChange} placeholder="City" className="h-9" />
-            
+            {formErrors.city && <span className="text-red-500 text-xs ml-1">{formErrors.city}</span>}
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">State<span className="text-red-500">*</span></label>
             <Input name="state" value={newSupplier.state} onChange={handleInputChange} placeholder="State" className="h-9" />
-            
+            {formErrors.state && <span className="text-red-500 text-xs ml-1">{formErrors.state}</span>}
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Complete Address<span className="text-red-500">*</span></label>
             <Input name="address" value={newSupplier.address} onChange={handleInputChange} placeholder="Complete Address" className="h-9" />
-            
+            {formErrors.address && <span className="text-red-500 text-xs ml-1">{formErrors.address}</span>}
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">GST Holder</label>
@@ -626,6 +668,9 @@ export default function PurchasersDetail() {
             </div>
           </div>
           <DialogFooter>
+            <Button variant="ghost" onClick={handleClearFilter}>
+              Clear Filter
+            </Button>
             <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
               Cancel
             </Button>

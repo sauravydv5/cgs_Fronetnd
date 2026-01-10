@@ -131,6 +131,11 @@ export default function HSN() {
     localStorage.setItem("hsnReportColumnOrder", JSON.stringify(columns));
   }, [columns]);
 
+  const handleClearFilter = () => {
+    setFromDate("");
+    setToDate("");
+  };
+
   const SortableHeader = ({
     column,
   }: {
@@ -244,6 +249,18 @@ export default function HSN() {
                   onKeyDown={(e) => e.preventDefault()}
                 />
               </div>
+            </div>
+
+            {/* Clear Filter */}
+            <div className="flex flex-col">
+              <label className="text-[13px] text-transparent mb-1 select-none">_</label>
+              <Button
+                variant="ghost"
+                onClick={handleClearFilter}
+                className="h-[42px] text-gray-500 hover:text-gray-700"
+              >
+                Clear Filter
+              </Button>
             </div>
 
             {/* Export Button */}

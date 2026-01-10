@@ -114,6 +114,8 @@ export default function SaleReturn() {
   const [selectedReturn, setSelectedReturn] = useState<any | null>(null);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const location = useLocation();
 
@@ -234,6 +236,11 @@ export default function SaleReturn() {
       formatDate(ret.date).includes(query)
     );
   });
+
+  const totalPages = Math.ceil(filteredReturns.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredReturns.length);
+  const currentReturns = filteredReturns.slice(startIndex, endIndex);
 
   return (
     <AdminLayout title="Bill Generation > Sale Return">
@@ -369,7 +376,10 @@ export default function SaleReturn() {
             placeholder="Search by Return ID, Bill ID, Customer"
             className="w-80 rounded-full pl-4 pr-10 py-2 bg-[#ffe9e1] placeholder:text-gray-500 border-none shadow-sm focus:ring-0"
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setCurrentPage(1);
+            }}
           />
           <Search
             className="absolute right-3 text-[#f97a63] cursor-pointer"
@@ -462,7 +472,7 @@ export default function SaleReturn() {
             </tbody>
           ) : (
             <tbody>
-              {filteredReturns.map((ret, i) => (
+              {currentReturns.map((ret, i) => (
                 <tr
                   key={ret._id || i}
                   className="text-sm border-b last:border-none bg-white hover:bg-[#f8fbff] transition"
@@ -547,16 +557,46 @@ export default function SaleReturn() {
           )}
         </table>
       </div>
-       {/* Pagination (Static for now as per Sale.tsx) */}
-      <div className="flex justify-center items-center space-x-2 mt-6">
-        <button className="text-gray-500 hover:text-black text-sm">&lt;</button>
-        <button className="w-6 h-6 flex items-center justify-center rounded-full bg-[#f97a63] text-white text-sm">
-          1
-        </button>
-        <button className="text-gray-700 hover:text-black text-sm">2</button>
-        <span className="text-gray-500 text-sm">3 ... 56</span>
-        <button className="text-gray-500 hover:text-black text-sm">&gt;</button>
-      </div>
+
+      {/* Pagination */}
+      {filteredReturns.length > 0 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t bg-gray-50 gap-3 rounded-b-lg mt-4">
+          <div className="text-xs sm:text-sm text-gray-600">
+            Showing {startIndex + 1} to {endIndex} of {filteredReturns.length} entries
+          </div>
+          <div className="flex gap-1 flex-wrap justify-center">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage === 1}
+              className="h-8 text-xs"
+            >
+              Previous
+            </Button>
+            {Array.from({ length: totalPages }).map((_, i) => (
+              <Button
+                key={i + 1}
+                variant={currentPage === i + 1 ? "default" : "outline"}
+                size="sm"
+                onClick={() => setCurrentPage(i + 1)}
+                className={`h-8 w-8 p-0 text-xs ${currentPage === i + 1 ? "bg-[#e48a7c] hover:bg-[#d77b6f] text-white border-[#e48a7c]" : ""}`}
+              >
+                {i + 1}
+              </Button>
+            ))}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage === totalPages}
+              className="h-8 text-xs"
+            >
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

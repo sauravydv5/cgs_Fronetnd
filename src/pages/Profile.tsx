@@ -18,6 +18,7 @@ function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profileImagePreview, setProfileImagePreview] = useState("");
+  const [profileImageFile, setProfileImageFile] = useState<File | null>(null);
   const [isDataLoaded, setIsDataLoaded] = useState(false);
 
   useEffect(() => {
@@ -31,6 +32,9 @@ function Profile() {
           return;
         }
 
+        const profilePicUrl =
+          profileData.profilePic || profileData.profilePicture || "";
+
         setFormData({
           firstName: profileData.firstName || "",
           lastName: profileData.lastName || "",
@@ -39,9 +43,9 @@ function Profile() {
           dateofBirth: profileData.dateofBirth
             ? profileData.dateofBirth.split("T")[0]
             : "",
-          profilePic: profileData.profilePic || "",
+          profilePic: profilePicUrl,
         });
-        setProfileImagePreview(profileData.profilePic);
+        setProfileImagePreview(profilePicUrl);
         setIsDataLoaded(true);
       };
 
@@ -107,9 +111,7 @@ function Profile() {
     if (file) {
       const imageURL = URL.createObjectURL(file);
       setProfileImagePreview(imageURL);
-      // In a real implementation, you would upload the file to a server
-      // and get back a URL to store in formData.profilePic
-      console.log("Selected image:", file);
+      setProfileImageFile(file);
     }
   };
 
@@ -123,13 +125,70 @@ function Profile() {
 
     try {
       setSaving(true);
-      // Exclude email from the payload to prevent it from being updated
-      const { email, ...updatePayload } = formData;
+
+      const updatePayload: any = {
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        phoneNumber: formData.phoneNumber,
+        dateofBirth: formData.dateofBirth,
+        profilePic: formData.profilePic,
+      };
+
+      if (profileImageFile) {
+        const compressImage = (file: File): Promise<string> => {
+          return new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.readAsDataURL(file);
+            reader.onload = (event) => {
+              const img = new Image();
+              img.src = event.target?.result as string;
+              img.onload = () => {
+                const canvas = document.createElement("canvas");
+                const MAX_WIDTH = 600;
+                const MAX_HEIGHT = 600;
+                let width = img.width;
+                let height = img.height;
+
+                if (width > height) {
+                  if (width > MAX_WIDTH) {
+                    height *= MAX_WIDTH / width;
+                    width = MAX_WIDTH;
+                  }
+                } else {
+                  if (height > MAX_HEIGHT) {
+                    width *= MAX_HEIGHT / height;
+                    height = MAX_HEIGHT;
+                  }
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext("2d");
+                if (ctx) {
+                  ctx.drawImage(img, 0, 0, width, height);
+                  resolve(canvas.toDataURL("image/jpeg", 0.7));
+                } else {
+                  resolve(event.target?.result as string);
+                }
+              };
+              img.onerror = (error) => reject(error);
+            };
+            reader.onerror = (error) => reject(error);
+          });
+        };
+        updatePayload.profilePic = await compressImage(profileImageFile);
+      }
 
       const response = await updateAdminProfile(updatePayload);
 
       if (response.status) {
         const updatedData = response.data;
+        const newProfilePicUrl =
+          updatedData.profilePicture ||
+          updatedData.profilePic ||
+          formData.profilePic ||
+          "";
+
         setFormData({
           firstName: updatedData.firstName || "",
           lastName: updatedData.lastName || "",
@@ -138,16 +197,19 @@ function Profile() {
           dateofBirth: updatedData.dateofBirth
             ? updatedData.dateofBirth.split("T")[0]
             : "",
-          profilePic: updatedData.profilePic || "",
+          profilePic: newProfilePicUrl,
         });
-        setProfileImagePreview(updatedData.profilePic || "");
+        setProfileImagePreview(newProfilePicUrl);
         localStorage.setItem("adminProfile", JSON.stringify(updatedData));
+        setProfileImageFile(null);
         toast.success("Profile updated successfully!");
       }
     } catch (error) {
       console.error("Error updating profile:", error);
       if (error.response?.status === 401) {
         toast.error("Session expired. Please login again.");
+      } else if (error.response?.status === 413) {
+        toast.error("Image is too large. Please choose a smaller image.");
       } else if (error.response) {
         toast.error(
           `Failed to update profile: ${
@@ -176,9 +238,7 @@ function Profile() {
 
   return (
     <AdminLayout title="Profile">
-      <div
-        className="p-4 sm:p-6"
-      >
+      <div className="p-4 sm:p-6">
         <form onSubmit={handleSubmit}>
           <div className="mx-auto max-w-2xl rounded-lg bg-white p-6 shadow-sm">
             {/* Profile Picture */}

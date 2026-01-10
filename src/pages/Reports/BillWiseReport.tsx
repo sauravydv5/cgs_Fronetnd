@@ -3,7 +3,7 @@ import { AdminLayout } from "@/components/AdminLayout";
 import React, { useState, useEffect, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Download, Calendar } from "lucide-react";
+import { Search, Download, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import {
   DndContext,
   closestCenter,
@@ -65,6 +65,9 @@ export default function BillWiseReport() {
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
 
@@ -77,26 +80,26 @@ export default function BillWiseReport() {
     localStorage.setItem("billWiseReportColumnOrder", JSON.stringify(columns));
   }, [columns]);
 
-  useEffect(() => {
-    const fetchReportData = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const response = await getAllReports();
-        if (response.success && Array.isArray(response.bills)) {
-          setRows(transformSaleData(response.bills));
-        } else {
-          setError("Failed to fetch report data: response was not successful.");
-          setRows([]);
-        }
-      } catch (err) {
-        setError("Failed to fetch report data.");
-        console.error(err);
-      } finally {
-        setLoading(false);
+  const fetchReportData = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const response = await getAllReports();
+      if (response.success && Array.isArray(response.bills)) {
+        setRows(transformSaleData(response.bills));
+      } else {
+        setError("Failed to fetch report data: response was not successful.");
+        setRows([]);
       }
-    };
+    } catch (err) {
+      setError("Failed to fetch report data.");
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  };
 
+  useEffect(() => {
     fetchReportData();
   }, []);
 
@@ -135,6 +138,12 @@ export default function BillWiseReport() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleClearFilter = () => {
+    setDateRange({ start: "", end: "" });
+    setDateFilterOpen(false);
+    fetchReportData();
   };
 
   const SortableHeader = ({ column }: { column: { id: string; label: string } }) => {
@@ -202,6 +211,15 @@ export default function BillWiseReport() {
       (row.partyName?.toLowerCase() || '').includes(searchTerm.toLowerCase())
     );
   }, [rows, searchTerm]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, rows]);
+
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = filteredRows.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(filteredRows.length / itemsPerPage);
 
   const totals = useMemo(() => {
     return filteredRows.reduce(
@@ -300,7 +318,7 @@ export default function BillWiseReport() {
                   </DndContext>
                 </thead>
                 <tbody>
-                  {filteredRows.map((row) => (
+                  {currentItems.map((row) => (
                     <tr key={row.id} className="border-b hover:bg-[#FFF6F5]">
                       {columns.map((col) => renderCell(row, col.id))}
                     </tr>
@@ -322,6 +340,67 @@ export default function BillWiseReport() {
             );
           })()}
         </div>
+
+        {/* Pagination */}
+        {!loading && !error && filteredRows.length > itemsPerPage && (
+          <div className="flex justify-between items-center mt-4 pb-10 px-4">
+            <div className="text-sm text-gray-500">
+              Showing {indexOfFirstItem + 1} to{" "}
+              {Math.min(indexOfLastItem, filteredRows.length)} of {filteredRows.length} entries
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`h-8 w-8 p-0 ${
+                        currentPage === pageNum
+                          ? "bg-[#E98C81] hover:bg-[#d87a6f] text-white border-none"
+                          : ""
+                      }`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
 
         {/* Summary Cards */}
         <div className="flex flex-wrap justify-center gap-6 mt-6">
@@ -393,6 +472,9 @@ export default function BillWiseReport() {
             </div>
           </div>
           <DialogFooter>
+            <Button variant="ghost" onClick={handleClearFilter}>
+              Clear Filter
+            </Button>
             <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
               Cancel
             </Button>

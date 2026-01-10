@@ -3,7 +3,7 @@ import { AdminLayout } from "@/components/AdminLayout"; // Assuming this is the 
 import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar, Download } from "lucide-react";
+import { Calendar, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import {
   arrayMove,
@@ -44,6 +44,9 @@ export default function SaleTaxRegister() {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
 
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
+
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
 
@@ -51,6 +54,11 @@ export default function SaleTaxRegister() {
     const savedOrder = localStorage.getItem("saleTaxRegisterColumnOrder");
     return savedOrder ? JSON.parse(savedOrder) : initialColumns;
   });
+
+  const handleClearFilter = () => {
+    setFromDate("");
+    setToDate("");
+  };
 
   useEffect(() => {
     const fetchReport = async () => {
@@ -156,6 +164,7 @@ export default function SaleTaxRegister() {
 
           setRows(transformedRows);
           setSummary(calculatedSummary);
+          setCurrentPage(1);
         } else {
           setError("Failed to fetch sale tax register data.");
         }
@@ -239,6 +248,11 @@ export default function SaleTaxRegister() {
     }
   };
 
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = rows.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(rows.length / itemsPerPage);
+
   return (
     <AdminLayout title="Report > Sale Tax Register">
       <div className=" bg-white min-h-screen">
@@ -281,6 +295,18 @@ export default function SaleTaxRegister() {
                 onKeyDown={(e) => e.preventDefault()}
               />
             </div>
+          </div>
+
+          {/* Clear Filter */}
+          <div className="flex flex-col">
+            <label className="text-xs opacity-0 mb-1 ml-1">_</label>
+            <Button
+              variant="ghost"
+              onClick={handleClearFilter}
+              className="h-[50px] text-gray-500 hover:text-gray-700"
+            >
+              Clear Filter
+            </Button>
           </div>
 
           {/* Export Button */}
@@ -445,7 +471,7 @@ export default function SaleTaxRegister() {
                     </DndContext>
                   </thead>
                   <tbody>
-                    {rows.map((row) => (
+                    {currentItems.map((row) => (
                       <tr
                         key={row.id}
                         className="border-b hover:bg-gray-50 text-gray-800"
@@ -459,6 +485,67 @@ export default function SaleTaxRegister() {
             })()
           )}
         </div>
+
+        {/* Pagination */}
+        {!loading && !error && rows.length > itemsPerPage && (
+          <div className="flex justify-between items-center mt-4 pb-10 px-4">
+            <div className="text-sm text-gray-500">
+              Showing {indexOfFirstItem + 1} to{" "}
+              {Math.min(indexOfLastItem, rows.length)} of {rows.length} entries
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`h-8 w-8 p-0 ${
+                        currentPage === pageNum
+                          ? "bg-[#E98C81] hover:bg-[#d87a6f] text-white border-none"
+                          : ""
+                      }`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

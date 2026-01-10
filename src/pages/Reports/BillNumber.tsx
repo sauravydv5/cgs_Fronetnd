@@ -3,7 +3,7 @@ import { AdminLayout } from "@/components/AdminLayout";
 import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Calendar, Search } from "lucide-react";
+import { Calendar, Search, RotateCcw } from "lucide-react";
 import React, { useState } from "react";
 
 export default function BillNumber() {
@@ -16,6 +16,11 @@ export default function BillNumber() {
 
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
+  const handleClearFilter = () => {
+    setFromDate("");
+    setToDate("");
+  };
 
   const handleSearch = async () => {
     if (!billNumber.trim()) {
@@ -116,6 +121,18 @@ export default function BillNumber() {
                 size={16}
               />
             </div>
+          </div>
+
+          {/* Clear Filter */}
+          <div className="flex flex-col items-center">
+            <label className="text-sm text-transparent mb-1 select-none">_</label>
+            <Button
+              variant="ghost"
+              onClick={handleClearFilter}
+              className="h-10 text-gray-500 hover:text-gray-700"
+            >
+              <RotateCcw size={20} />
+            </Button>
           </div>
         </div>
 

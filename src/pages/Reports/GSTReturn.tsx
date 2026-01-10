@@ -3,7 +3,7 @@ import { AdminLayout } from "@/components/AdminLayout";
 import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Download } from "lucide-react";
+import { Download, ChevronLeft, ChevronRight } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import {
   DndContext,
@@ -17,17 +17,19 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { format, startOfMonth, endOfMonth } from "date-fns";
 
 export default function GSTReturn() {
   const [data, setData] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [reportDate, setReportDate] = useState(format(new Date(), "yyyy-MM-dd"));
+  const [reportDate, setReportDate] = useState("");
   const [gstNumber, setGstNumber] = useState("03AATFC3920N125"); // Placeholder
 
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const initialColumns = [
     { id: "sno", label: "SNO." },
@@ -55,21 +57,25 @@ export default function GSTReturn() {
       try {
         let response;
         if (reportDate) {
-          const dateObj = new Date(reportDate);
-          const startDate = format(startOfMonth(dateObj), "yyyy-MM-dd");
-          const endDate = format(endOfMonth(dateObj), "yyyy-MM-dd");
+          const [year, month] = reportDate.split('-').map(Number);
+          const startDateObj = new Date(year, month - 1, 1);
+          const endDateObj = new Date(year, month, 0);
+          
+          const startDate = `${startDateObj.getFullYear()}-${String(startDateObj.getMonth() + 1).padStart(2, "0")}-${String(startDateObj.getDate()).padStart(2, "0")}`;
+          const endDate = `${endDateObj.getFullYear()}-${String(endDateObj.getMonth() + 1).padStart(2, "0")}-${String(endDateObj.getDate()).padStart(2, "0")}`;
+
           response = await getReportsByDateRange(startDate, endDate);
         } else {
           response = await getAllReports();
         }
-        if (response.success && Array.isArray(response.bills)) {
+        if (response && response.success && Array.isArray(response.bills)) {
           let billsData = response.bills;
 
           if (reportDate) {
-            const dateObj = new Date(reportDate);
-            const start = startOfMonth(dateObj);
+            const [year, month] = reportDate.split('-').map(Number);
+            const start = new Date(year, month - 1, 1);
             start.setHours(0, 0, 0, 0);
-            const end = endOfMonth(dateObj);
+            const end = new Date(year, month, 0);
             end.setHours(23, 59, 59, 999);
             billsData = billsData.filter((bill: any) => {
               const billDate = new Date(bill.billDate || bill.date || bill.createdAt);
@@ -118,6 +124,7 @@ export default function GSTReturn() {
           });
 
           setData(Object.values(aggregatedData));
+          setCurrentPage(1);
         } else {
           setError("Failed to fetch GST return data.");
         }
@@ -194,6 +201,11 @@ export default function GSTReturn() {
     document.body.removeChild(link);
   };
 
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = data.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(data.length / itemsPerPage);
+
   return (
     <AdminLayout title="Report > GST Return">
       <div className="bg-white p-8 rounded-xl">
@@ -239,14 +251,14 @@ export default function GSTReturn() {
         {/* Info Card */}
         <div className="rounded-xl p-5 mb-6 bg-[#EBEBEB] shadow-sm border border-gray-200">
           <h2 className="font-semibold text-gray-800 mb-2">
-            GSTR1 - Details of outward supplies for {format(new Date(reportDate), "MM/yyyy")}
+            GSTR1 - Details of outward supplies for {reportDate ? new Date(reportDate).toLocaleDateString('en-GB', { month: '2-digit', year: 'numeric' }).replace('/', '/') : ''}
           </h2>
           <p className="text-sm text-gray-700">
             Company Name : Cheap General Store {/* Placeholder */}
           </p>
-          <p className="text-sm text-gray-700">Period Name : {format(new Date(reportDate), "yyyy-MM")}</p> {/* Derived from reportDate */}
+          <p className="text-sm text-gray-700">Period Name : {reportDate ? reportDate.substring(0, 7) : ''}</p> {/* Derived from reportDate */}
           <p className="text-sm text-gray-700">GST No. : {gstNumber}</p>
-          <p className="text-sm text-gray-700">GST Date : {format(new Date(reportDate), "dd-MMM-yy")}</p>
+          <p className="text-sm text-gray-700">GST Date : {reportDate ? new Date(reportDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-') : ''}</p>
         </div>
 
         {/* Table */}
@@ -254,18 +266,24 @@ export default function GSTReturn() {
           {(() => {
             const columnIds = columns.map((c) => c.id); // Ensure columnIds is defined here
             const renderCell = (row: any, columnId: string, index: number) => {
+              const formatCurrency = (amount: number) => {
+                return (amount || 0).toLocaleString('en-IN', {
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 2,
+                });
+              };
               switch (columnId) {
                 case "sno": return <td className="border px-4 py-2">{index + 1}</td>;
                 case "description": return <td className="border px-4 py-2">{row.description}</td>;
                 case "docType": return <td className="border px-4 py-2">{row.docType}</td>;
-                case "invoiceValue": return <td className="border px-4 py-2">{row.invoiceValue}</td>;
-                case "invoiceValueTcs": return <td className="border px-4 py-2">{row.invoiceValueTcs}</td>;
-                case "taxableValue": return <td className="border px-4 py-2">{row.taxableValue}</td>;
-                case "centralTax": return <td className="border px-4 py-2">{row.centralTax}</td>;
-                case "stateTax": return <td className="border px-4 py-2">{row.stateTax}</td>;
-                case "integratedTax": return <td className="border px-4 py-2">{row.integratedTax}</td>;
-                case "cess": return <td className="border px-4 py-2">{row.cess}</td>;
-                case "totalTax": return <td className="border px-4 py-2">{row.totalTax}</td>;
+                case "invoiceValue": return <td className="border px-4 py-2">{formatCurrency(row.invoiceValue)}</td>;
+                case "invoiceValueTcs": return <td className="border px-4 py-2">{formatCurrency(row.invoiceValueTcs)}</td>;
+                case "taxableValue": return <td className="border px-4 py-2">{formatCurrency(row.taxableValue)}</td>;
+                case "centralTax": return <td className="border px-4 py-2">{formatCurrency(row.centralTax)}</td>;
+                case "stateTax": return <td className="border px-4 py-2">{formatCurrency(row.stateTax)}</td>;
+                case "integratedTax": return <td className="border px-4 py-2">{formatCurrency(row.integratedTax)}</td>;
+                case "cess": return <td className="border px-4 py-2">{formatCurrency(row.cess)}</td>;
+                case "totalTax": return <td className="border px-4 py-2">{formatCurrency(row.totalTax)}</td>;
                 default: return null;
               }
             };
@@ -289,7 +307,7 @@ export default function GSTReturn() {
                   <tbody><tr><td colSpan={columns.length} className="text-center py-10 text-red-500">{error}</td></tr></tbody>
                 ) : (
                   <tbody>
-                    {data.map((row, i) => (
+                    {currentItems.map((row, i) => (
                       <tr key={row.id} className="bg-white hover:bg-gray-50">
                         {columns.map((col) => renderCell(row, col.id, i))}
                       </tr>
@@ -300,6 +318,67 @@ export default function GSTReturn() {
             );
           })()}
         </div>
+
+        {/* Pagination */}
+        {!loading && !error && data.length > itemsPerPage && (
+          <div className="flex justify-between items-center mt-4 pb-10 px-4">
+            <div className="text-sm text-gray-500">
+              Showing {indexOfFirstItem + 1} to{" "}
+              {Math.min(indexOfLastItem, data.length)} of {data.length} entries
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`h-8 w-8 p-0 ${
+                        currentPage === pageNum
+                          ? "bg-[#E98C81] hover:bg-[#d87a6f] text-white border-none"
+                          : ""
+                      }`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );

@@ -207,6 +207,12 @@ export default function Customers() {
     }
   }, [dateRange]);
 
+  const handleClearFilter = () => {
+    setDateRange({ start: "", end: "" });
+    setDateFilterOpen(false);
+    fetchCustomers();
+  };
+
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
@@ -736,6 +742,9 @@ export default function Customers() {
               </div>
             </div>
             <DialogFooter>
+              <Button variant="ghost" onClick={handleClearFilter}>
+                Clear Filter
+              </Button>
               <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
                 Cancel
               </Button>

@@ -43,7 +43,7 @@ export default function AddEmployee() {
           setRoles(data);
         }
       } catch (error) {
-        console.error("Failed to fetch roles:", error);
+        console.error("Failed to fetch roles error:", error);
       }
     };
 

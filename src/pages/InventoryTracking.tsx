@@ -100,6 +100,15 @@ export default function InventoryTracking() {
       }
 
       const mappedProducts = Array.isArray(productData) ? productData.map(p => ({...p, stock: p.stock ?? 0})) : [];
+      
+      // Sort by stock ascending (low stock first)
+      mappedProducts.sort((a, b) => {
+        const stockA = a.stock ?? 0;
+        const stockB = b.stock ?? 0;
+        if (stockA !== stockB) return stockA - stockB;
+        return (a.itemCode || "").localeCompare(b.itemCode || "");
+      });
+
       setProducts(mappedProducts);
     } catch (err) {
       console.error("Fetch error:", err);
@@ -147,9 +156,12 @@ export default function InventoryTracking() {
     );
   });
 
+  // Filter low stock products to only show those with stock <= 10
+  const displayableLowStockProducts = lowStockProducts.filter((p: any) => (p.stock ?? 0) <= 10);
+
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const endIndex = startIndex + itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredProducts.length);
   const currentProducts = filteredProducts.slice(startIndex, endIndex);
 
   const handleSearchChange = (e) => {
@@ -407,8 +419,14 @@ export default function InventoryTracking() {
                           <td className="px-4 py-3 max-w-[200px] truncate">{product.productName || 'N/A'}</td>
                           <td className="px-4 py-3">{product.stock ?? 0}</td>
                           <td className="px-4 py-3">Rs. {product.mrp || 0}</td>
-                          <td className={`px-4 py-3 font-semibold ${getStockColor(product.stock)}`}>
-                            {product.stock ?? 0}
+                          <td className="px-4 py-3">
+                            <span className={`font-semibold ${getStockColor(product.stock)}`}>
+                              {product.stock > 0
+                                ? product.stock <= 10
+                                  ? `Low Stock (${product.stock})`
+                                  : product.stock
+                                : "Out of stock"}
+                            </span>
                           </td>
                           <td className="px-4 py-3 text-right">
                             <DropdownMenu>
@@ -441,8 +459,8 @@ export default function InventoryTracking() {
             {filteredProducts.length > 0 && (
               <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t bg-gray-50 gap-3">
                 <div className="text-xs sm:text-sm text-gray-600">
-                  Showing {startIndex + 1} to {Math.min(endIndex, filteredProducts.length)} of{" "}
-                  {filteredProducts.length}
+                  Showing {startIndex + 1} to {endIndex} of{" "}
+                  {filteredProducts.length} entries
                 </div>
                 <div className="flex gap-1 flex-wrap justify-center">
                   <Button
@@ -452,7 +470,7 @@ export default function InventoryTracking() {
                     disabled={currentPage === 1}
                     className="h-8 text-xs"
                   >
-                    Prev
+                    Previous
                   </Button>
                   {Array.from({ length: totalPages }).map((_, i) => (
                     <Button
@@ -520,7 +538,16 @@ export default function InventoryTracking() {
                     <div className="grid grid-cols-2 gap-2 text-xs pt-2 border-t border-gray-100 mt-2">
                       <p><span className="text-gray-500">Qty: </span>{product.stock ?? 0}</p>
                       <p><span className="text-gray-500">Price: </span>Rs. {product.mrp || 0}</p>
-                      <p><span className="text-gray-500">Stock: </span><span className={getStockColor(product.stock)}>{product.stock ?? 0}</span></p>
+                      <p>
+                        <span className="text-gray-500">Stock: </span>
+                        <span className={getStockColor(product.stock)}>
+                          {product.stock > 0
+                            ? product.stock <= 10
+                              ? `Low Stock (${product.stock})`
+                              : product.stock
+                            : "Out of stock"}
+                        </span>
+                      </p>
                     </div>
                   </div>
                 ))
@@ -544,8 +571,8 @@ export default function InventoryTracking() {
           </div>
 
           <div className="space-y-3 max-h-[300px] overflow-y-auto mb-4">
-            {lowStockProducts.length > 0 ? (
-              lowStockProducts.map((product: any) => (
+            {displayableLowStockProducts.length > 0 ? (
+              displayableLowStockProducts.map((product: any) => (
                 <div key={product._id} className="bg-red-50 p-3 rounded-md border border-red-200">
                   <p className="text-xs sm:text-sm text-red-700 font-medium">
                     {product.productName} – <span className="font-semibold">{product.stock} Units remaining</span>
@@ -561,7 +588,7 @@ export default function InventoryTracking() {
             <select 
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-[#007E66]"
               onChange={(e) => {
-                const product = lowStockProducts.find((p: any) => p._id === e.target.value);
+                const product = displayableLowStockProducts.find((p: any) => p._id === e.target.value);
                 if (product) {
                   setStockUpdateProduct(product);
                   setNewStockValue(product.stock);
@@ -571,7 +598,7 @@ export default function InventoryTracking() {
               }}
             >
               <option>Update Stock</option>
-              {lowStockProducts.map((p: any) => (
+              {displayableLowStockProducts.map((p: any) => (
                 <option key={p._id} value={p._id}>{p.productName}</option>
               ))}
             </select>

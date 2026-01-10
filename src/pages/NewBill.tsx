@@ -509,16 +509,15 @@ export default function NewBill() {
   const handleNewBillProductSelect = (product: any, rowIndex: number) => {
     setNewBillItems((prev) => {
       const updated = [...prev];
-
       const row = updated[rowIndex];
-
-      // 🔴 VERY IMPORTANT: product ka real Mongo ID
-      const productId = product._id;
-
       const mrp = Number(product.mrp) || 0;
       const qty = Number(row.qty) || 1;
       const cd = Number(product.discount) || 0;
-      const tax = Number(product.gst) || 0;
+      const tax =
+  row.tax !== undefined && row.tax !== ""
+    ? Number(row.tax)
+    : Number(product.gst) || 0;
+
 
       const calc = calculateRowAmount({ mrp, qty, cd, tax });
 

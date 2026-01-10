@@ -226,9 +226,12 @@ export default function ProductManagement() {
         count = response.data.total || productData.length;
       }
 
-      productData.sort((a, b) =>
-        (a.itemCode || "").localeCompare(b.itemCode || "")
-      );
+      productData.sort((a, b) => {
+        const stockA = a.stock ?? 0;
+        const stockB = b.stock ?? 0;
+        if (stockA !== stockB) return stockA - stockB;
+        return (a.itemCode || "").localeCompare(b.itemCode || "");
+      });
 
       setProducts(productData);
       setTotalProducts(count);
@@ -779,12 +782,13 @@ export default function ProductManagement() {
       case "price":
         return <td key={columnId} className="px-6 py-4">₹{product.mrp || 0}</td>;
       case "stock":
+        const isLowStock = (product.stock ?? 0) <= 10;
         return (
           <td key={columnId} className="px-6 py-4">
             <span
-              className={product.stock > 0 ? "text-green-600" : "text-red-600"}
+              className={isLowStock ? "text-red-600 font-medium" : "text-green-600"}
             >
-              {product.stock > 0 ? "In-stock" : "Out of stock"}
+              {product.stock > 0 ? (isLowStock ? `Low Stock (${product.stock})` : "In-stock") : "Out of stock"}
             </span>
           </td>
         );

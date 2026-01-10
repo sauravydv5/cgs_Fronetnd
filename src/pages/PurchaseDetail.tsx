@@ -66,6 +66,8 @@ export default function PurchaseDetail() {
   });
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
@@ -142,6 +144,12 @@ export default function PurchaseDetail() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleClearFilter = () => {
+    setDateRange({ start: "", end: "" });
+    setDateFilterOpen(false);
+    fetchPurchases();
   };
 
   const handleDelete = async (purchaseId: string) => {
@@ -287,6 +295,11 @@ export default function PurchaseDetail() {
     (p.supplierName?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  const totalPages = Math.ceil(filteredPurchases.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredPurchases.length);
+  const currentPurchases = filteredPurchases.slice(startIndex, endIndex);
+
   const SortableHeader = ({ column }: { column: { id: string; label: string } }) => {
     const { attributes, listeners, setNodeRef, transform, transition } =
       useSortable({ id: column.id });
@@ -319,7 +332,10 @@ export default function PurchaseDetail() {
               placeholder="Search by Purchase ID or Supplier"
               className="rounded-full bg-[#fff7f6] border border-[#f3cdc8] text-gray-700 placeholder-gray-400 focus:ring-0 focus:border-[#e48a7c]"
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
             />
             <Button
               variant="ghost"
@@ -408,8 +424,8 @@ export default function PurchaseDetail() {
                     <tr>
                       <td colSpan={columns.length} className="text-center py-10">Loading purchase details...</td>
                     </tr>
-                  ) : filteredPurchases.length > 0 ? (
-                    filteredPurchases.map((item) => (
+                  ) : currentPurchases.length > 0 ? (
+                    currentPurchases.map((item) => (
                       <tr
                         key={item._id}
                         className="border-b hover:bg-[#fff7f6] transition-colors"
@@ -429,23 +445,44 @@ export default function PurchaseDetail() {
         })()}
 
         {/* Pagination */}
-        <div className="flex justify-center items-center mt-6 gap-2 text-sm">
-          <button className="px-3 py-1 text-gray-500 hover:text-[#e48a7c]">
-            &lt;
-          </button>
-          <button className="px-3 py-1 bg-[#e48a7c] text-white rounded-full">
-            1
-          </button>
-          <button className="px-3 py-1 text-gray-700 hover:text-[#e48a7c]">
-            2
-          </button>
-          <button className="px-3 py-1 text-gray-700">3</button>
-          <span className="text-gray-500">...</span>
-          <button className="px-3 py-1 text-gray-700">56</button>
-          <button className="px-3 py-1 text-gray-500 hover:text-[#e48a7c]">
-            &gt;
-          </button>
-        </div>
+        {filteredPurchases.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t bg-gray-50 gap-3 rounded-b-lg">
+            <div className="text-xs sm:text-sm text-gray-600">
+              Showing {startIndex + 1} to {endIndex} of {filteredPurchases.length} entries
+            </div>
+            <div className="flex gap-1 flex-wrap justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="h-8 text-xs"
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalPages }).map((_, i) => (
+                <Button
+                  key={i + 1}
+                  variant={currentPage === i + 1 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`h-8 w-8 p-0 text-xs ${currentPage === i + 1 ? "bg-[#e48a7c] hover:bg-[#d77b6f] text-white border-[#e48a7c]" : ""}`}
+                >
+                  {i + 1}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="h-8 text-xs"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Add/Edit Purchase Modal */}
@@ -659,6 +696,9 @@ export default function PurchaseDetail() {
             </div>
           </div>
           <DialogFooter>
+            <Button variant="ghost" onClick={handleClearFilter}>
+              Clear Filter
+            </Button>
             <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
               Cancel
             </Button>

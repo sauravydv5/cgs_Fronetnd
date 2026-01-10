@@ -1,6 +1,6 @@
 import { AdminLayout } from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
-import { Download, Search, Calendar } from "lucide-react";
+import { Download, Search, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
 import {
@@ -60,6 +60,8 @@ export default function BillHSNWise() {
   const [hsnCodes, setHsnCodes] = useState<string[]>([]);
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
@@ -182,6 +184,11 @@ export default function BillHSNWise() {
     fetchReportData();
   };
 
+  const handleClearFilter = () => {
+    setDateRange({ start: "", end: "" });
+    setDateFilterOpen(false);
+  };
+
   useEffect(() => {
     localStorage.setItem("billHSNWiseColumnOrder", JSON.stringify(columns));
   }, [columns]);
@@ -189,6 +196,15 @@ export default function BillHSNWise() {
   useEffect(() => {
     fetchReportData();
   }, [fetchReportData]);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [billData]);
+
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = billData.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(billData.length / itemsPerPage);
 
   // ---------------- CSV Export ----------------
   const handleExport = () => {
@@ -318,9 +334,9 @@ export default function BillHSNWise() {
                       </tr>
                     ) : billData.length > 0 ? (
                       <>
-                        {billData.map((row, index) => (
+                        {currentItems.map((row, index) => (
                           <tr key={row.id || index} className="hover:bg-gray-50 transition-colors">
-                            {columns.map((col) => renderCell({ ...row, sno: index + 1 }, col.id))}
+                            {columns.map((col) => renderCell({ ...row, sno: indexOfFirstItem + index + 1 }, col.id))}
                           </tr>
                         ))}
                         {summary && (
@@ -377,6 +393,64 @@ export default function BillHSNWise() {
               </SortableContext>
             </DndContext>
           </div>
+
+          {/* Pagination */}
+          {billData.length > itemsPerPage && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-gray-500">
+                Showing {indexOfFirstItem + 1} to {Math.min(indexOfLastItem, billData.length)} of {billData.length} entries
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                  disabled={currentPage === 1}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                  Previous
+                </Button>
+                <div className="flex items-center gap-1">
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNum;
+                    if (totalPages <= 5) {
+                      pageNum = i + 1;
+                    } else if (currentPage <= 3) {
+                      pageNum = i + 1;
+                    } else if (currentPage >= totalPages - 2) {
+                      pageNum = totalPages - 4 + i;
+                    } else {
+                      pageNum = currentPage - 2 + i;
+                    }
+                    return (
+                      <Button
+                        key={pageNum}
+                        variant={currentPage === pageNum ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`h-8 w-8 p-0 ${
+                          currentPage === pageNum
+                            ? "bg-[#E98C81] hover:bg-[#d87a6f] text-white border-none"
+                            : ""
+                        }`}
+                      >
+                        {pageNum}
+                      </Button>
+                    );
+                  })}
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+                  disabled={currentPage === totalPages}
+                >
+                  Next
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
 
           {/* Summary Cards */}
           <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
@@ -439,6 +513,7 @@ export default function BillHSNWise() {
               </div>
             </div>
             <DialogFooter>
+              <Button variant="ghost" onClick={handleClearFilter}>Clear Filter</Button>
               <Button variant="outline" onClick={() => setDateFilterOpen(false)}>Cancel</Button>
               <Button className="bg-[#E98C81] hover:bg-[#f48c83]" onClick={handleDateRangeApply}>Apply Filter</Button>
             </DialogFooter>

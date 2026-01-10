@@ -50,6 +50,8 @@ export default function ReturnPurchase() {
   });
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
@@ -163,6 +165,12 @@ export default function ReturnPurchase() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleClearFilter = () => {
+    setDateRange({ start: "", end: "" });
+    setDateFilterOpen(false);
+    fetchReturns();
   };
 
   const SortableHeader = ({ column }: { column: { id: string; label: string } }) => {
@@ -296,6 +304,11 @@ export default function ReturnPurchase() {
     }
   );
 
+  const totalPages = Math.ceil(filteredReturns.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredReturns.length);
+  const currentReturns = filteredReturns.slice(startIndex, endIndex);
+
   return (
     <AdminLayout title="Purchase > Return Purchase">
       <div className="p-6">
@@ -306,7 +319,10 @@ export default function ReturnPurchase() {
               type="text"
               placeholder="Search by Return ID, Supplier"
               value={search}
-              onChange={(e) => setSearch(e.target.value)}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setCurrentPage(1);
+              }}
               className="pl-10 pr-4 py-2 rounded-full border-gray-300 focus:ring-0"
             />
             <Search
@@ -388,8 +404,8 @@ export default function ReturnPurchase() {
                         <tr>
                           <td colSpan={columns.length} className="text-center py-10">Loading...</td>
                         </tr>
-                      ) : filteredReturns.length > 0 ? (
-                        filteredReturns.map((item) => (
+                      ) : currentReturns.length > 0 ? (
+                        currentReturns.map((item) => (
                           <tr
                             key={item._id}
                             className="border-t border-gray-100 hover:bg-gray-50 transition"
@@ -411,15 +427,44 @@ export default function ReturnPurchase() {
         </Card>
 
         {/* Pagination */}
-        <div className="flex justify-center items-center gap-2 mt-6 text-sm text-gray-600">
-          <button className="px-2 py-1 rounded hover:bg-gray-100">&lt;</button>
-          <button className="px-2 py-1 rounded bg-gray-200 text-gray-800">1</button>
-          <span className="font-medium text-blue-600">2</span>
-          <span>3</span>
-          <span>…</span>
-          <span>56</span>
-          <button className="px-2 py-1 rounded hover:bg-gray-100">&gt;</button>
-        </div>
+        {filteredReturns.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-3 border-t bg-gray-50 gap-3 rounded-b-lg mt-4">
+            <div className="text-xs sm:text-sm text-gray-600">
+              Showing {startIndex + 1} to {endIndex} of {filteredReturns.length} entries
+            </div>
+            <div className="flex gap-1 flex-wrap justify-center">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                className="h-8 text-xs"
+              >
+                Previous
+              </Button>
+              {Array.from({ length: totalPages }).map((_, i) => (
+                <Button
+                  key={i + 1}
+                  variant={currentPage === i + 1 ? "default" : "outline"}
+                  size="sm"
+                  onClick={() => setCurrentPage(i + 1)}
+                  className={`h-8 w-8 p-0 text-xs ${currentPage === i + 1 ? "bg-[#e48a7c] hover:bg-[#d77b6f] text-white border-[#e48a7c]" : ""}`}
+                >
+                  {i + 1}
+                </Button>
+              ))}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage === totalPages}
+                className="h-8 text-xs"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Date Range Filter Dialog */}
@@ -460,6 +505,7 @@ export default function ReturnPurchase() {
             </div>
           </div>
           <DialogFooter>
+            <Button variant="ghost" onClick={handleClearFilter}>Clear Filter</Button>
             <Button variant="outline" onClick={() => setDateFilterOpen(false)}>Cancel</Button>
             <Button className="bg-[#E98C81] hover:bg-[#f48c83]" onClick={handleDateRangeSearch}>Apply Filter</Button>
           </DialogFooter>

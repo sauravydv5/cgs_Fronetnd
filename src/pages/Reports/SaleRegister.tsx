@@ -3,7 +3,7 @@ import { AdminLayout } from "@/components/AdminLayout";
 import { getAllReports, getReportsByDateRange } from "@/adminApi/reportApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar, Download } from "lucide-react";
+import { Calendar, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import React, { useState, useEffect } from "react";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import {
@@ -20,6 +20,9 @@ export default function SaleRegister() {
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
@@ -85,6 +88,7 @@ export default function SaleRegister() {
             }))
           );
           setRows(flattenedData);
+          setCurrentPage(1);
         } else {
           setError("Failed to fetch sale register data.");
         }
@@ -102,6 +106,11 @@ export default function SaleRegister() {
   useEffect(() => {
     localStorage.setItem("saleRegisterColumnOrder", JSON.stringify(columns));
   }, [columns]);
+
+  const handleClearFilter = () => {
+    setFromDate("");
+    setToDate("");
+  };
 
   const handleExport = () => {
     if (!rows || rows.length === 0) return;
@@ -154,6 +163,11 @@ export default function SaleRegister() {
     );
   };
 
+  const indexOfLastItem = currentPage * itemsPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
+  const currentItems = rows.slice(indexOfFirstItem, indexOfLastItem);
+  const totalPages = Math.ceil(rows.length / itemsPerPage);
+
   return (
     <AdminLayout title="Reports > Sale Register">
       <div className="p-6">
@@ -202,6 +216,18 @@ export default function SaleRegister() {
                 onKeyDown={(e) => e.preventDefault()}
               />
             </div>
+          </div>
+
+          {/* Clear Filter */}
+          <div className="flex flex-col">
+            <label className="text-[13px] text-transparent mb-1 select-none">_</label>
+            <Button
+              variant="ghost"
+              onClick={handleClearFilter}
+              className="h-[42px] text-gray-500 hover:text-gray-700"
+            >
+              Clear Filter
+            </Button>
           </div>
 
           <div className="flex flex-col">
@@ -294,7 +320,7 @@ export default function SaleRegister() {
                   <tbody><tr><td colSpan={columns.length} className="text-center py-10 text-red-500">{error}</td></tr></tbody>
                 ) : (
                   <tbody>
-                    {rows.map((row) => (
+                    {currentItems.map((row) => (
                       <tr
                         key={row.id}
                         className="bg-white shadow-sm hover:border hover:border-blue-400 transition-all"
@@ -308,6 +334,67 @@ export default function SaleRegister() {
             );
           })()}
         </div>
+
+        {/* Pagination */}
+        {!loading && !error && rows.length > itemsPerPage && (
+          <div className="flex justify-between items-center mt-4 pb-10 px-4">
+            <div className="text-sm text-gray-500">
+              Showing {indexOfFirstItem + 1} to{" "}
+              {Math.min(indexOfLastItem, rows.length)} of {rows.length} entries
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+                Previous
+              </Button>
+              <div className="flex items-center gap-1">
+                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                  let pageNum;
+                  if (totalPages <= 5) {
+                    pageNum = i + 1;
+                  } else if (currentPage <= 3) {
+                    pageNum = i + 1;
+                  } else if (currentPage >= totalPages - 2) {
+                    pageNum = totalPages - 4 + i;
+                  } else {
+                    pageNum = currentPage - 2 + i;
+                  }
+                  return (
+                    <Button
+                      key={pageNum}
+                      variant={currentPage === pageNum ? "default" : "outline"}
+                      size="sm"
+                      onClick={() => setCurrentPage(pageNum)}
+                      className={`h-8 w-8 p-0 ${
+                        currentPage === pageNum
+                          ? "bg-[#E98C81] hover:bg-[#d87a6f] text-white border-none"
+                          : ""
+                      }`}
+                    >
+                      {pageNum}
+                    </Button>
+                  );
+                })}
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                }
+                disabled={currentPage === totalPages}
+              >
+                Next
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+        )}
       </div>
     </AdminLayout>
   );
