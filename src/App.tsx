@@ -32,7 +32,7 @@ import SaleRegister from "./pages/Reports/SaleRegister";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import GeneralSettings from "./pages/GeneralSettings";
-import Customers from "./pages/Customers";
+// import Customers from "./pages/Customers";
 import NewBill from "./pages/NewBill";
 import BillDrafts from "./pages/BillDrafts";
 import SaleReturn from "./pages/SaleReturn";
@@ -63,7 +63,7 @@ const App = () => (
           <Route path="/bills/sale" element={<Sale />} />
           <Route path="/bills/sale-return" element={<SaleReturn />} />
           <Route path="/bills/new-bill" element={<NewBill />} />
-          <Route path="/bills/customers" element={<Customers />} />
+          {/* <Route path="/bills/customers" element={<Customers />} /> */}
           <Route path="/bills/drafts" element={<BillDrafts />} />
           <Route path="/purchases" element={<Purchases />} />
           <Route path="/purchases/purchasers-detail" element={<PurchasersDetail />} />

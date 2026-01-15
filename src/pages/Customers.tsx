@@ -86,7 +86,7 @@ export default function Customers() {
     lastName: "",
     phoneNumber: "",
     email: "",
-    customerCode: "",
+    // customerCode: "",
     gender: "",
     dateOfBirth: "",
   });
@@ -256,13 +256,13 @@ export default function Customers() {
         lastName: newCustomer.lastName,
         email: newCustomer.email,
         phoneNumber: newCustomer.phoneNumber,
-        customerCode: newCustomer.customerCode,
+        // customerCode: newCustomer.customerCode,
         dateOfBirth: newCustomer.dateOfBirth, // Matching payload key
         gender: newCustomer.gender,
         password: "SecurePass123", // Using default password as per payload example, consider making this dynamic or more secure
         profilePic: "https://example.com/profile.jpg", // Using default profile pic as per payload example, consider making this dynamic
       };
-      await addCustomer(payload);
+      const response = await addCustomer(payload);
       toast.success("Customer added successfully!");
       setIsDrawerOpen(false); // Close the drawer
       setNewCustomer({
@@ -271,11 +271,22 @@ export default function Customers() {
         lastName: "",
         phoneNumber: "",
         email: "",
-        customerCode: "",
+        // customerCode: "",
         gender: "",
         dateOfBirth: "",
       });
-      fetchCustomers(); // Refetch customers to show the new one
+
+      const createdCustomer = response.data?.data?.customer || response.data?.data || response.data?.customer || response.data;
+      if (createdCustomer && (createdCustomer._id || createdCustomer.id)) {
+        const customerId = createdCustomer._id || createdCustomer.id;
+        const name = createdCustomer.firstName || createdCustomer.lastName ? `${createdCustomer.firstName} ${createdCustomer.lastName}`.trim() : "N/A";
+        const code = createdCustomer.customerCode || `CUST${String(customers.length + 1).padStart(3, '0')}`;
+        navigate(`/bills/new-bill?id=${customerId}`, { 
+          state: { openAddProductModal: true, customerName: name, customerCode: code } 
+        });
+      } else {
+        fetchCustomers();
+      }
     } catch (error: any) {
       console.error("Failed to add customer:", error);
       toast.error(
@@ -351,10 +362,7 @@ export default function Customers() {
             <SheetTrigger asChild>
               <Button
                 className="rounded-full bg-[#E98C81] hover:bg-[#d97a71] text-white px-5 w-full sm:w-auto"
-                onClick={() => {
-                  const nextCustomerNumber = customers.length + 1;
-                  setNewCustomer(prev => ({ ...prev, customerCode: `CUST${String(nextCustomerNumber).padStart(3, '0')}` }));
-                }}
+                onClick={() => {}}
               >
                 + Add Customer
               </Button>
@@ -370,13 +378,6 @@ export default function Customers() {
 
                 <div className="flex-1 overflow-y-auto px-6 py-6">
                   <div className="space-y-5">
-                    <Input
-                      name="customerCode"
-                      value={newCustomer.customerCode}
-                      placeholder="Customer Code"
-                      className="w-full h-12 bg-gray-200 border-gray-300 rounded-lg text-gray-800 placeholder:text-gray-500 font-semibold"
-                      readOnly
-                    />
                     <Input
                       name="firstName"
                       value={newCustomer.firstName}
@@ -505,7 +506,7 @@ export default function Customers() {
                           toast.error("This customer is blocked. Please unblock to generate a bill.");
                           return;
                         }
-                        navigate(`/bills/new-bill?customerId=${customer.id}`, { state: { openAddProductModal: true, customerName: customer.name, customerCode: customer.sno } });
+                        navigate(`/bills/new-bill?id=${customer.id}`, { state: { openAddProductModal: true, customerName: customer.name, customerCode: customer.sno } });
                       }}
                     >
                       <td className="px-4 sm:px-6 py-3">{customer.sno}</td>
@@ -544,7 +545,7 @@ export default function Customers() {
                                       toast.error("This customer is blocked. Please unblock to view bills.");
                                       return;
                                     }
-                                    navigate(`/bills/new-bill?customerId=${customer.id}`, { state: { customerName: customer.name, customerCode: customer.sno } });
+                                    navigate(`/bills/new-bill?id=${customer.id}`, { state: { customerName: customer.name, customerCode: customer.sno } });
                                   }}
                                 >
                                   <Eye className="w-4 h-4 text-gray-600" />

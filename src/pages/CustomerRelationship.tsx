@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import { AdminLayout } from "@/components/AdminLayout";
 import {
   getCustomers,
@@ -10,6 +11,7 @@ import {
   getCustomersByDateRange,
   updateCustomerRating,
 } from "@/adminApi/customerApi";
+import { getBillsByCustomerId } from "@/adminApi/billApi";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { Button } from "@/components/ui/button";
@@ -22,6 +24,7 @@ import {
   Calendar as CalendarIcon,
   CalendarDays,
   Star,
+  Eye,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -71,6 +74,7 @@ import { Calendar } from "@/components/ui/calendar";
 
 
 export default function CustomerRelationship() {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<any[]>([]);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
@@ -80,6 +84,8 @@ export default function CustomerRelationship() {
   const [updatingStatus, setUpdatingStatus] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+  const [customerBills, setCustomerBills] = useState<any[]>([]);
+  const [loadingBills, setLoadingBills] = useState(false);
   // Only include the required fields in the newCustomer state
   const [newCustomer, setNewCustomer] = useState({
     firstName: "",
@@ -326,7 +332,7 @@ export default function CustomerRelationship() {
         password: "SecurePass123", // Using default password as per payload example, consider making this dynamic or more secure
         profilePic: "https://example.com/profile.jpg", // Using default profile pic as per payload example, consider making this dynamic
       };
-      await addCustomer(payload);
+      const response = await addCustomer(payload);
       toast.success("Customer added successfully!");
       setIsDrawerOpen(false); // Close the drawer
       setNewCustomer({
@@ -338,7 +344,22 @@ export default function CustomerRelationship() {
         gender: "",
         dateOfBirth: "",
       });
-      fetchCustomers(); // Refetch customers to show the new one
+
+      const createdCustomer =
+        response.data?.data || response.data?.customer || response.data;
+      if (createdCustomer && (createdCustomer._id || createdCustomer.id)) {
+        const customerId = createdCustomer._id || createdCustomer.id;
+        const name =
+          createdCustomer.firstName || createdCustomer.lastName
+            ? `${createdCustomer.firstName} ${createdCustomer.lastName}`.trim()
+            : "N/A";
+        const code = createdCustomer.customerCode || `CUST${String(customers.length + 1).padStart(3, '0')}`;
+        navigate(`/bills/new-bill?id=${customerId}`, {
+          state: { openAddProductModal: true, customerName: name, customerCode: code },
+        });
+      } else {
+        fetchCustomers();
+      }
     } catch (error: any) {
       console.error("Failed to add customer:", error);
       toast.error(
@@ -355,9 +376,27 @@ export default function CustomerRelationship() {
     setNewCustomer((prev) => ({ ...prev, [name]: value }));
   };
 
+  const fetchCustomerBills = async (customerId: string) => {
+    setLoadingBills(true);
+    try {
+      const response = await getBillsByCustomerId(customerId);
+      if (response.success && Array.isArray(response.bills)) {
+        setCustomerBills(response.bills);
+      } else {
+        setCustomerBills([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch customer bills:", error);
+      setCustomerBills([]);
+    } finally {
+      setLoadingBills(false);
+    }
+  };
+
   const handleViewDetails = (customer) => {
     setSelectedCustomer(customer);
     setIsDetailsOpen(true);
+    fetchCustomerBills(customer.id);
   };
 
   const filteredCustomers = customers.filter((customer) => {
@@ -432,7 +471,7 @@ export default function CustomerRelationship() {
           {/* Add Customer Sheet */}
           <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
             <SheetTrigger asChild>
-              <Button className="rounded-full bg-[#E98C81] hover:bg-[#d97a71] text-white px-5 w-full sm:w-auto">
+              <Button className="rounded-full bg-[#E98C81] hover:bg-[#d97a71] text-white px-5 w-full sm:w-auto" onClick={() => {}}>
                 + Add Customer
               </Button>
             </SheetTrigger>
@@ -593,6 +632,20 @@ export default function CustomerRelationship() {
 
                       <td className="px-4 sm:px-6 py-3 text-center">
                         <div className="flex justify-center gap-2 flex-wrap">
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            className="w-8 h-8 rounded-md border-gray-300"
+                            onClick={() => {
+                              if (customer.status === "Blocked") {
+                                toast.error("This customer is blocked. Please unblock to view bills.");
+                                return;
+                              }
+                              navigate(`/bills/new-bill?id=${customer.id}`, { state: { customerName: customer.name, customerCode: customer.sno } });
+                            }}
+                          >
+                            <Eye className="w-4 h-4 text-gray-600" />
+                          </Button>
                           {customer.status === "Active" ? (
                             <Button
                               size="sm"
@@ -773,24 +826,6 @@ export default function CustomerRelationship() {
                       </p>
                     </div>
 
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <p className="text-sm text-gray-500 mb-1">
-                        Date of Birth
-                      </p>
-                      <p className="text-base font-medium text-gray-900">
-                        {selectedCustomer.dateOfBirth}
-                      </p>
-                    </div>
-
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <p className="text-sm text-gray-500 mb-1">
-                        Marital Status
-                      </p>
-                      <p className="text-base font-medium text-gray-900 capitalize">
-                        {selectedCustomer.maritalStatus}
-                      </p>
-                    </div>
-
                     {selectedCustomer.anniversary !== "N/A" && (
                       <div className="bg-gray-50 p-4 rounded-lg">
                         <p className="text-sm text-gray-500 mb-1">
@@ -801,14 +836,59 @@ export default function CustomerRelationship() {
                         </p>
                       </div>
                     )}
-
-                    <div className="bg-gray-50 p-4 rounded-lg">
-                      <p className="text-sm text-gray-500 mb-1">Score Code</p>
-                      <p className="text-base font-medium text-gray-900">
-                        {selectedCustomer.scoreCode}
-                      </p>
-                    </div>
                   </div>
+                </div>
+
+                {/* Bill Details */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4 mt-6">
+                    Bill Details
+                  </h3>
+                  {loadingBills ? (
+                    <div className="text-center py-4 text-gray-500">Loading bills...</div>
+                  ) : customerBills.length > 0 ? (
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 text-gray-700 font-medium border-b">
+                          <tr>
+                            <th className="px-4 py-2">Bill No</th>
+                            <th className="px-4 py-2">Date</th>
+                            <th className="px-4 py-2 text-right">Amount</th>
+                            <th className="px-4 py-2 text-center">Status</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {customerBills.map((bill) => (
+                            <tr key={bill._id} className="hover:bg-gray-50">
+                              <td className="px-4 py-2 font-medium">{bill.billNo}</td>
+                              <td className="px-4 py-2">
+                                {new Date(bill.billDate || bill.date || bill.createdAt).toLocaleDateString("en-GB")}
+                              </td>
+                              <td className="px-4 py-2 text-right">
+                                ₹{bill.netAmount?.toLocaleString("en-IN")}
+                              </td>
+                              <td className="px-4 py-2 text-center">
+                                <span
+                                  className={cn(
+                                    "px-2 py-1 rounded-full text-xs font-medium",
+                                    bill.paymentStatus === "Paid"
+                                      ? "bg-green-100 text-green-800"
+                                      : bill.paymentStatus === "Unpaid"
+                                      ? "bg-red-100 text-red-800"
+                                      : "bg-yellow-100 text-yellow-800"
+                                  )}
+                                >
+                                  {bill.paymentStatus || "Draft"}
+                                </span>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500">No bills found for this customer.</p>
+                  )}
                 </div>
 
                 {/* Action Buttons */}

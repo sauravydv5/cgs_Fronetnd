@@ -67,7 +67,8 @@ export default function NewBill() {
   const [searchParams] = useSearchParams();
   const [customerInfo, setCustomerInfo] = useState({ name: "", code: "" });
   const location = useLocation();
-  const customerId = searchParams.get("customerId");
+  const rawCustomerId = searchParams.get("id");
+  const customerId = rawCustomerId === "undefined" ? null : rawCustomerId;
   const [products, setProducts] = useState<any[]>([]);
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
@@ -109,6 +110,70 @@ export default function NewBill() {
     const savedOrder = localStorage.getItem("billDetailsTableColumnOrder_v2");
     return savedOrder ? JSON.parse(savedOrder) : initialColumns;
   });
+
+  const fetchBills = React.useCallback(async () => {
+    if (!customerId) {
+      setLoading(false);
+      return;
+    }
+    try {
+      setLoading(true);
+      // setRows([]);
+
+      const response = await getBillsByCustomerId(customerId);
+      if (
+        response &&
+        response.success &&
+        Array.isArray(response.bills) &&
+        response.bills.length > 0
+      ) {
+        const firstBill = response.bills[0];
+        const customerName =
+          firstBill.customerName || firstBill.customerId?.name;
+
+        if (customerName) {
+          setCustomerInfo((prev) => ({ ...prev, name: customerName }));
+        }
+
+        const allItems = response.bills.flatMap((bill: any) =>
+          bill.items.map((item: any, idx: number) => ({
+            ...bill,
+            ...item,
+            billId: bill._id,
+            uniqueId: item._id || `${bill._id}-${idx}`,
+          }))
+        );
+
+        const flattenedRows = allItems.map((item: any, index: number) => {
+          const sno = index + 1;
+          return {
+            ...item,
+            id: item.uniqueId,
+            adItemCode: `AD${String(sno).padStart(4, "0")}`,
+            sno: `${String(sno).padStart(2, "0")}.`,
+            lot: item.batch || "N/A",
+            cd: item.discountPercent,
+            netAmount: item.total,
+            tax: item.gstPercent,
+          };
+        });
+        setRows(flattenedRows);
+      } else {
+        setRows([]);
+      }
+    } catch (error: any) {
+      // Do not show an error if it's a 404, as it's expected for new customers.
+      if (error.response?.status === 404) {
+        setRows([]);
+      } else {
+        console.error("Failed to fetch bills:", error);
+        const errorMessage = error.response?.data?.message || "Could not fetch bills.";
+        toast.error(errorMessage);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [customerId]);
 
   useEffect(() => {
     const fetchProducts = async () => {
@@ -154,82 +219,13 @@ export default function NewBill() {
       });
     }
 
-    // If there's no customerId, don't attempt to fetch.
-    if (!customerId) {
-      setLoading(false);
-      return;
+    if (location.state?.openAddProductModal) {
+      setOpenAddProductModal(true);
+      setNewBillItems([{ id: `new-item-${Date.now()}`, sno: "01." }]);
     }
 
-    const fetchBills = async () => {
-      if (!customerId) {
-        toast.error("No Customer ID provided.");
-        setLoading(false);
-        return;
-      }
-      try {
-        setLoading(true);
-        // Clear previous data to prevent showing stale bills from another customer
-        setRows([]);
-        setCustomerInfo({
-          name: location.state?.customerName || "",
-          code: location.state?.customerCode || "",
-        });
-
-        const response = await getBillsByCustomerId(customerId);
-        // The API returns an array of bills for a customer, we'll take the first one.
-        if (
-          response &&
-          response.success &&
-          Array.isArray(response.bills) &&
-          response.bills.length > 0
-        ) {
-          const firstBill = response.bills[0];
-          const customerName =
-            firstBill.customerName || firstBill.customerId?.name;
-        
-          if (customerName) {
-             // Only update the name. The code is already set from location.state and is more reliable.
-            setCustomerInfo((prev) => ({ ...prev, name: customerName }));
-          }
-
-          // Flatten items from ALL bills, not just the first one
-          const allItems = response.bills.flatMap((bill: any) =>
-            bill.items.map((item: any, idx: number) => ({
-              ...bill,
-              ...item,
-              billId: bill._id,
-              uniqueId: item._id || `${bill._id}-${idx}`,
-            }))
-          );
-
-          const flattenedRows = allItems.map((item: any, index: number) => {
-            const sno = index + 1;
-            return {
-              ...item,
-              id: item.uniqueId,
-              adItemCode: `AD${String(sno).padStart(4, "0")}`,
-              sno: `${String(sno).padStart(2, "0")}.`,
-              lot: item.batch || "N/A", // Ensure N/A for blank batch
-              cd: item.discountPercent, // Map discountPercent to cd for consistency
-              netAmount: item.total, // Map total to netAmount
-              tax: item.gstPercent, // Map gstPercent to tax
-            };
-          });
-          setRows(flattenedRows);
-        } else {
-          toast.error(response.message || "Bill not found.");
-        }
-      } catch (error: any) {
-        console.error("Failed to fetch bills:", error);
-        const errorMessage =
-          error.response?.data?.message || "Could not fetch bills.";
-        toast.error(errorMessage);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchBills();
-  }, [customerId, location.state]);
+  }, [customerId, location.state, fetchBills, navigate]);
   useEffect(() => {
     localStorage.setItem(
       "billDetailsTableColumnOrder_v2",
@@ -306,11 +302,6 @@ export default function NewBill() {
   };
 
   const handleSaveBill = async () => {
-    if (!customerId) {
-      toast.error("Customer ID is missing.");
-      return;
-    }
-
     const billItems = newBillItems
       .map((row) => ({
         productId: row.productId,
@@ -355,17 +346,42 @@ export default function NewBill() {
 
     setIsSaving(true);
     try {
+      let responseData;
       if (editingBillId) {
-        await updateBill({ id: editingBillId, data: payload });
+        const res = await updateBill({ id: editingBillId, data: payload });
+        responseData = res.data;
         toast.success("Bill updated successfully!");
       } else {
-        await addNewBill(payload);
+        responseData = await addNewBill(payload);
         toast.success("Bill saved successfully!");
       }
       setOpenAddProductModal(false);
       setOpenPreview(false);
       setEditingBillId(null);
-      navigate(0); // Refresh the page to show updated data
+      
+      if (customerId) {
+        await fetchBills();
+      } else {
+        const savedBill = responseData?.data || responseData?.bill || responseData;
+        if (savedBill && Array.isArray(savedBill.items)) {
+             const flattenedRows = savedBill.items.map((item: any, index: number) => {
+                const sno = index + 1;
+                return {
+                    ...savedBill,
+                    ...item,
+                    billId: savedBill._id,
+                    uniqueId: item._id || `${savedBill._id}-${index}`,
+                    adItemCode: `AD${String(sno).padStart(4, "0")}`,
+                    sno: `${String(sno).padStart(2, "0")}.`,
+                    lot: item.batch || "N/A",
+                    cd: item.discountPercent,
+                    netAmount: item.total,
+                    tax: item.gstPercent,
+                };
+            });
+            setRows(flattenedRows);
+        }
+      }
     } catch (error: any) {
       const errorMessage =
         error.response?.data?.message ||
@@ -391,10 +407,6 @@ export default function NewBill() {
   };
 
   const handleGenerateBill = async () => {
-    if (!customerId) {
-      toast.error("Customer ID is missing.");
-      return;
-    }
     try {
       const response = await generateBill(customerId);
       // The API returns a base64 data URL in the 'url' field
@@ -466,7 +478,7 @@ export default function NewBill() {
   const handleDeleteBill = async (billId: string) => {
     if (!confirm("Are you sure you want to delete this bill?")) return;
     await deleteBill(billId);
-    navigate(0);
+    fetchBills();
   };
 
   // Helper to calculate row amounts (net, tax, total)
@@ -837,8 +849,9 @@ export default function NewBill() {
                 ) as HTMLIFrameElement;
                 iframe?.contentWindow?.print();
               }}
+              className="bg-[#E98C81] hover:bg-[#d97a71] text-white"
             >
-              Print
+              Save & Print
             </Button>
           </DialogHeader>
           {generatedBillHtml && (
@@ -1079,7 +1092,7 @@ export default function NewBill() {
                 onClick={handleSaveBill}
                 className="bg-[#E98C81] hover:bg-[#df7c72] text-white rounded-full px-10 py-3 font-medium shadow-md"
               >
-                {editingBillId ? "Update Bill" : "Save Bill"}
+                {editingBillId ? "Update Bill" : "Continue"}
               </Button>
             </div>
           </div>

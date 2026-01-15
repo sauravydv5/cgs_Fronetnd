@@ -5,6 +5,20 @@ import { AdminLayout } from "@/components/AdminLayout";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   DndContext,
   closestCenter,
   type DragEndEvent,
@@ -29,6 +43,7 @@ import { Check, ChevronsUpDown, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import newBillImg from "@/images/new-bill.png";
+import { addCustomer } from "@/adminApi/customerApi";
 import saleImg from "@/images/sale.png";
 import saleReturnImg from "@/images/sale-return.png";
 import draftsImg from "@/images/drafts.png";
@@ -70,6 +85,79 @@ export default function BillGeneration() {
   const [selectedCustomer, setSelectedCustomer] = useState<any>(null);
   const [allProducts, setAllProducts] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAddCustomerOpen, setIsAddCustomerOpen] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+    firstName: "",
+    lastName: "",
+    phoneNumber: "",
+    email: "",
+    gender: "",
+    dateOfBirth: "",
+  });
+  const [isAddingCustomer, setIsAddingCustomer] = useState(false);
+
+  const todayObj = new Date();
+  const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
+  const handleCustomerInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setNewCustomer((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleAddCustomer = async () => {
+    if (newCustomer.email && !newCustomer.email.includes("@")) {
+      toast.warning("Please enter a valid email address.");
+      return;
+    }
+
+    setIsAddingCustomer(true);
+    try {
+      let formattedDob = newCustomer.dateOfBirth;
+      if (formattedDob && formattedDob.includes("-")) {
+        const [year, month, day] = formattedDob.split("-");
+        formattedDob = `${day}/${month}/${year}`;
+      }
+
+      const payload: any = {
+        firstName: newCustomer.firstName,
+        lastName: newCustomer.lastName,
+        email: newCustomer.email,
+        phoneNumber: newCustomer.phoneNumber,
+        dateOfBirth: formattedDob,
+        gender: newCustomer.gender,
+        password: "SecurePass123",
+        profilePic: "https://example.com/profile.jpg",
+      };
+      const response = await addCustomer(payload);
+      toast.success("Customer added successfully!");
+      setIsAddCustomerOpen(false);
+      setNewCustomer({
+        firstName: "",
+        lastName: "",
+        phoneNumber: "",
+        email: "",
+        gender: "",
+        dateOfBirth: "",
+      });
+
+      const createdCustomer = response.data?.data?.customer || response.data?.customer || response.data?.data || response.data;
+      if (createdCustomer) {
+        const customerId = createdCustomer._id || createdCustomer.id || createdCustomer.customerId;
+        const name = createdCustomer.firstName || createdCustomer.lastName ? `${createdCustomer.firstName} ${createdCustomer.lastName}`.trim() : "N/A";
+        const code = createdCustomer.customerCode || "N/A";
+        navigate(`/bills/new-bill?id=${customerId}`, { state: { openAddProductModal: true, customerName: name, customerCode: code } });
+      }
+    } catch (error: any) {
+      console.error("Failed to add customer:", error);
+      toast.error(
+        `Failed to add customer. ${
+          error.response?.data?.message || "Please try again."
+        }`
+      );
+    } finally {
+      setIsAddingCustomer(false);
+    }
+  };
 
   useEffect(() => {
     if (location.state?.customer) {
@@ -268,7 +356,13 @@ export default function BillGeneration() {
           <Card
             key={index}
             className="w-[180px] h-[140px] flex flex-col items-center justify-center shadow-md rounded-2xl cursor-pointer transition-transform hover:scale-105 bg-[#e48a7c]"
-            onClick={() => navigate(card.path)}
+            onClick={() => {
+              if (card.title === "New Bill") {
+                setIsAddCustomerOpen(true);
+              } else {
+                navigate(card.path);
+              }
+            }}
           >
             <CardContent className="flex flex-col items-center justify-center text-white p-4">
               <img src={card.img} alt={card.title} className="w-12 h-12 mb-3" />
@@ -277,6 +371,93 @@ export default function BillGeneration() {
           </Card>
         ))}
       </div>
+
+      {/* Add Customer Sheet */}
+      <Sheet open={isAddCustomerOpen} onOpenChange={setIsAddCustomerOpen}>
+        <SheetContent side="right" className="w-full max-w-md bg-white shadow-2xl p-0">
+          <div className="flex flex-col h-full">
+            <SheetHeader className="border-b px-6 py-5">
+              <SheetTitle className="text-xl font-semibold text-gray-900">
+                Add Customer
+              </SheetTitle>
+            </SheetHeader>
+
+            <div className="flex-1 overflow-y-auto px-6 py-6">
+              <div className="space-y-5">
+                <input
+                  name="firstName"
+                  value={newCustomer.firstName}
+                  onChange={handleCustomerInputChange}
+                  placeholder="First Name"
+                  className="w-full h-12 bg-gray-50 border border-gray-200 rounded-lg px-3 text-gray-600 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  name="lastName"
+                  value={newCustomer.lastName}
+                  onChange={handleCustomerInputChange}
+                  placeholder="Last Name"
+                  className="w-full h-12 bg-gray-50 border border-gray-200 rounded-lg px-3 text-gray-600 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  name="phoneNumber"
+                  value={newCustomer.phoneNumber}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    if (/^\d*$/.test(value) && value.length <= 10) {
+                      handleCustomerInputChange(e);
+                    }
+                  }}
+                  placeholder="Mobile Number"
+                  className="w-full h-12 bg-gray-50 border border-gray-200 rounded-lg px-3 text-gray-600 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <input
+                  name="email"
+                  type="email"
+                  value={newCustomer.email}
+                  onChange={handleCustomerInputChange}
+                  placeholder="Email"
+                  className="w-full h-12 bg-gray-50 border border-gray-200 rounded-lg px-3 text-gray-600 placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <Select
+                  value={newCustomer.gender}
+                  onValueChange={(value) =>
+                    setNewCustomer((prev) => ({ ...prev, gender: value }))
+                  }
+                >
+                  <SelectTrigger className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600">
+                    <SelectValue placeholder="Select Gender" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Male">Male</SelectItem>
+                    <SelectItem value="Female">Female</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="relative">
+                  <input
+                    name="dateOfBirth"
+                    type="date"
+                    value={newCustomer.dateOfBirth}
+                    max={today}
+                    onChange={handleCustomerInputChange}
+                    onKeyDown={(e) => e.preventDefault()}
+                    onClick={(e) => e.currentTarget.showPicker()}
+                    className="w-full h-12 bg-gray-50 border border-gray-200 rounded-lg px-3 text-gray-600 placeholder:text-gray-400 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <Button
+                  onClick={handleAddCustomer}
+                  disabled={isAddingCustomer}
+                  className="w-full h-12 text-white rounded-lg text-base font-medium bg-[#E98C81] hover:bg-[#d97a71]"
+                >
+                  {isAddingCustomer ? "Adding..." : "Add"}
+                </Button>
+              </div>
+            </div>
+
+            <SheetFooter className="px-6 py-6 space-y-3"></SheetFooter>
+          </div>
+        </SheetContent>
+      </Sheet>
 
       {showModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
