@@ -6,9 +6,7 @@ import {
   deleteCustomer,
   updateCustomerStatus,
   addCustomer,
-  getCustomersByRating,
   getCustomersByDateRange,
-  updateCustomerRating,
 } from "@/adminApi/customerApi";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -25,7 +23,6 @@ import {
   Trash2,
   Ban,
   CalendarDays,
-  Star,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -122,7 +119,6 @@ export default function Customers() {
           anniversary: customer.anniversary || "N/A",
           gender: customer.gender || "N/A",
           scoreCode: "N/A",
-          rating: customer.rating || 0,
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
@@ -130,46 +126,6 @@ export default function Customers() {
       }
     } catch (error) {
       console.error("Failed to fetch customers:", error);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  const handleFilterByRating = useCallback(async (rating: number | null) => {
-    try {
-      setLoading(true);
-      setCurrentPage(1); // Reset to the first page on new filter
-      const response =
-        rating === null
-          ? await getCustomers({ limit: 10000 })
-          : await getCustomersByRating(rating);
-
-      if (response.data && response.data.status) {
-        const customersData = response.data.data.customers || [];
-        const reversedCustomers = [...customersData].reverse();
-        const formattedCustomers = reversedCustomers.map((customer, index) => ({
-          id: customer._id,
-          sno: `CUST${String(index + 1).padStart(3, "0")}`,
-          name:
-            customer.firstName || customer.lastName
-              ? `${customer.firstName} ${customer.lastName}`.trim()
-              : "N/A",
-          phone: customer.phoneNumber,
-          email: customer.email || "N/A",
-          dateOfBirth: customer.dateOfBirth || "N/A",
-          maritalStatus: customer.maritalStatus || "N/A",
-          anniversary: customer.anniversary || "N/A",
-          gender: customer.gender || "N/A",
-          scoreCode: "SC-102",
-          rating: customer.rating || 0,
-          status: customer.isBlocked ? "Blocked" : "Active",
-          rawData: customer,
-        }));
-        setCustomers(formattedCustomers);
-      }
-    } catch (error) {
-      console.error(`Failed to fetch customers for rating ${rating}:`, error);
-      setCustomers([]); // Clear list on error
     } finally {
       setLoading(false);
     }
@@ -198,7 +154,6 @@ export default function Customers() {
               : "N/A",
           phone: customer.phoneNumber,
           email: customer.email,
-          rating: customer.rating || 0,
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
@@ -245,22 +200,6 @@ export default function Customers() {
     },
     [customers]
   );
-
-  const handleRatingUpdate = async (customerId: string, newRating: number) => {
-    try {
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.id === customerId ? { ...c, rating: newRating } : c
-        )
-      );
-      await updateCustomerRating(customerId, newRating);
-      toast.success("Rating updated successfully");
-    } catch (error) {
-      console.error("Failed to update rating:", error);
-      toast.error("Failed to update rating");
-      fetchCustomers();
-    }
-  };
 
   const handleUpdateStatus = useCallback(
     async (customerId: string, shouldBlock: boolean) => {
@@ -384,28 +323,6 @@ export default function Customers() {
         {/* Filters */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div className="flex flex-wrap gap-3 items-center w-full lg:w-auto">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button className="rounded-full bg-[#fdebe3] text-gray-700 hover:bg-[#f9e5dc] text-sm sm:text-base">
-                  Filter by Rating ▼
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent>
-                {[5, 4, 3, 2, 1].map((rating) => (
-                  <DropdownMenuItem
-                    key={rating}
-                    onSelect={() => handleFilterByRating(rating)}
-                  >
-                    {rating} Star{rating > 1 ? "s" : ""}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onSelect={() => handleFilterByRating(null)}>
-                  Show All
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
             <button 
               onClick={() => setDateFilterOpen(true)}
               title="Filter by Date Range"
@@ -595,27 +512,9 @@ export default function Customers() {
                       <td className="px-4 sm:px-6 py-3">
                         <div className="flex flex-col">
                           <span className="font-medium">{customer.name}</span>
-                          <div className="flex items-center mt-1 space-x-0.5">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <Star
-                                key={i}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRatingUpdate(customer.id, i + 1);
-                                }}
-                                className={cn(
-                                  "w-3 h-3 cursor-pointer hover:scale-125 transition-transform",
-                                  i < Math.round(customer.rating || 0) ? "text-yellow-400 fill-yellow-400" : "text-gray-300"
-                                )}
-                              />
-                            ))}
-                          </div>
                         </div>
                       </td>
                       <td className="px-4 sm:px-6 py-3">{customer.phone}</td>
-                      {/* <td className="px-4 sm:px-6 py-3">
-                        {customer.scoreCode}
-                      </td> */}
                       <td className="px-4 sm:px-6 py-3">
                         <span
                           className={`font-medium ${

@@ -101,7 +101,7 @@ export default function CustomerRelationship() {
   const fetchCustomers = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await getCustomers();
+      const response = await getCustomers({ limit: 10000 });
       if (response.data && response.data.status) {
         const reversedCustomers = response.data.data.customers.reverse();
         const formattedCustomers = reversedCustomers.map((customer, index) => ({
@@ -137,7 +137,7 @@ export default function CustomerRelationship() {
       setCurrentPage(1); // Reset to the first page on new filter
       const response =
         rating === null
-          ? await getCustomers()
+          ? await getCustomers({ limit: 10000 })
           : await getCustomersByRating(rating);
 
       if (response.data && response.data.status) {

@@ -4,7 +4,7 @@ import adminInstance from "@/adminApi/adminInstance";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { toast } from "@/components/ui/use-toast"; // Using the existing toast system for consistency
+import { toast } from "sonner";
 import { Eye, EyeOff } from "lucide-react";
 import loginImage from "@/images/login-bg.png";
 import {
@@ -49,10 +49,7 @@ export default function Login() {
         localStorage.setItem("token", token);
         if (user) localStorage.setItem("user", JSON.stringify(user));
         
-        toast({
-          title: "Login Successful",
-          description: "Welcome back!",
-        });
+        toast.success("Login Successful");
         // Force reload to ensure axios instance picks up the new token and permissions apply
         window.location.href = "/dashboard";
         return;
@@ -72,19 +69,19 @@ export default function Login() {
         sessionStorage.setItem("userType", userType);
         navigate("/2fa");
       } else {
-        toast({
-          title: "Login Failed",
-          description: response.data?.message || "An unknown error occurred.",
-          variant: "destructive",
-        });
+        toast.error(response.data?.message || "An unknown error occurred.");
       }
     } catch (err: any) {
       console.error("Login API Error:", err); // Add this line for detailed error logging
-      toast({
-        title: "Login Failed",
-        description: err.response?.data?.message || "Please check your credentials and try again.",
-        variant: "destructive",
-      });
+
+      const backendMessage = String(err.response?.data?.message || "");
+      if (backendMessage.toLowerCase().includes("password")) {
+        toast.error("Invalid Password");
+      } else if (backendMessage.toLowerCase().includes("found") || backendMessage.toLowerCase().includes("email")) {
+        toast.error("Invalid Email");
+      } else {
+        toast.error(backendMessage || "Please check your credentials and try again.");
+      }
     } finally {
       setLoading(false);
     }

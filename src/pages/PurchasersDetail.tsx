@@ -38,15 +38,15 @@ export default function PurchasersDetail() {
   const [suppliers, setSuppliers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const initialColumns = [
-    { id: "contact", label: "CONTACT" },
-    { id: "supplierId", label: "SUPPLIER ID" },
-    { id: "name", label: "SUPPLIER NAME" },
-    { id: "companyName", label: "COMPANY" },
-    { id: "mobileNumber", label: "CONTACT" },
-    { id: "purchases", label: "PURCHASES" },
-    { id: "returns", label: "RETURNS" },
-    { id: "actions", label: "ACTIONS" },
-  ];
+  { id: "supplierId", label: "SUPPLIER ID" },
+  { id: "supplierName", label: "SUPPLIER NAME" },
+  { id: "companyName", label: "COMPANY" },
+  { id: "mobileNumber", label: "CONTACT" },
+  { id: "purchases", label: "PURCHASES" },
+  { id: "returns", label: "RETURNS" },
+  { id: "actions", label: "ACTIONS" },
+];
+
 
   const [showModal, setShowModal] = useState(false);
   const [showViewModal, setShowViewModal] = useState(false);
@@ -375,35 +375,56 @@ export default function PurchasersDetail() {
           const columnIds = columns.map((c) => c.id);
 
           const renderCell = (row, columnId) => {
-            switch (columnId) {
-              case "supplierId":
-                return <td className="py-3 px-4">{row.supplierId}</td>;
-              case "supplierName":
-                return <td className="py-3 px-4">{row.name || row.supplierName}</td>;
-              case "company":
-                return <td className="py-3 px-4">{row.companyName}</td>;
-              case "name":
-                return <td className="py-3 px-4">{row.name}</td>;
-              case "contact":
-                return <td className="py-3 px-4">{row.mobileNumber}</td>;
-              case "purchases":
-                return <td className="py-3 px-4">{row.purchases}</td>;
-              case "returns":
-                return <td className="py-3 px-4">{row.returns}</td>;
-              case "actions":
-                return (
-                  <td className="py-3 px-4 flex items-center justify-center gap-3">
-                    <button onClick={() => handleViewSupplier(row)} className="w-8 h-8 flex items-center justify-center border border-blue-500 text-blue-500 rounded-full hover:bg-blue-50 transition-colors" title="View Details">
-                      <Eye size={16} />
-                    </button>
-                    <button onClick={() => handleEditClick(row)} className="w-8 h-8 flex items-center justify-center border border-gray-400 text-gray-600 rounded-full hover:bg-gray-100 transition-colors" title="Edit Supplier"><Edit2 size={16} /></button>
-                    <button onClick={() => handleDeleteSupplier(row._id || row.id)} className="w-8 h-8 flex items-center justify-center border border-red-400 text-red-500 rounded-full hover:bg-red-50 transition-colors" title="Delete Supplier"><Trash2 size={16} /></button>
-                  </td>
-                );
-              default:
-                return null;
-            }
-          };
+  switch (columnId) {
+    case "supplierId":
+      return <td className="py-3 px-4">{row.supplierId}</td>;
+
+    case "supplierName":
+      return <td className="py-3 px-4">{row.name}</td>;
+
+    case "companyName":
+      return <td className="py-3 px-4">{row.companyName}</td>;
+
+    case "mobileNumber":
+      return <td className="py-3 px-4">{row.mobileNumber}</td>;
+
+    case "purchases":
+      return <td className="py-3 px-4">{row.purchases}</td>;
+
+    case "returns":
+      return <td className="py-3 px-4">{row.returns}</td>;
+
+    case "actions":
+      return (
+        <td className="py-3 px-4 flex items-center justify-center gap-3">
+          <button
+            onClick={() => handleViewSupplier(row)}
+            className="w-8 h-8 flex items-center justify-center border border-blue-500 text-blue-500 rounded-full hover:bg-blue-50"
+          >
+            <Eye size={16} />
+          </button>
+
+          <button
+            onClick={() => handleEditClick(row)}
+            className="w-8 h-8 flex items-center justify-center border border-gray-400 text-gray-600 rounded-full hover:bg-gray-100"
+          >
+            <Edit2 size={16} />
+          </button>
+
+          <button
+            onClick={() => handleDeleteSupplier(row._id || row.id)}
+            className="w-8 h-8 flex items-center justify-center border border-red-400 text-red-500 rounded-full hover:bg-red-50"
+          >
+            <Trash2 size={16} />
+          </button>
+        </td>
+      );
+
+    default:
+      return null;
+  }
+};
+
 
           return (
             <div className="overflow-x-auto rounded-lg border border-gray-200">

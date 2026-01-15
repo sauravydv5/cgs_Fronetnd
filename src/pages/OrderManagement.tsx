@@ -35,6 +35,7 @@ import {
 const initialColumns = [
   { id: "orderId", label: "Order ID" },
   { id: "customer", label: "Customer" },
+  { id: "mobileNumber", label: "Mobile Number" },
   { id: "date", label: "Date" },
   { id: "payment", label: "Payment" },
   { id: "status", label: "Status" },
@@ -97,10 +98,13 @@ export default function OrderManagement() {
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
   const [columns, setColumns] = useState(() => {
-    const savedOrder = localStorage.getItem("orderTableColumnOrder");
+    const savedOrder = localStorage.getItem("orderTableColumnOrder_v2");
     if (savedOrder) {
       try {
-        return JSON.parse(savedOrder);
+        const savedColumns = JSON.parse(savedOrder);
+        const savedIds = new Set(savedColumns.map((c: any) => c.id));
+        const missingColumns = initialColumns.filter((c) => !savedIds.has(c.id));
+        return [...savedColumns, ...missingColumns];
       } catch (e) {
         return initialColumns;
       }
@@ -222,8 +226,9 @@ export default function OrderManagement() {
           const searchLower = search.toLowerCase().trim();
           const searchFiltered = orderData.filter((order: any) => {
             const customerName = order.user?.name?.toLowerCase() || "";
+            const mobileNumber = order.user?.mobileNumber || "";
             const orderId = (order.orderId || order._id || "").toLowerCase();
-            return customerName.includes(searchLower) || orderId.includes(searchLower);
+            return customerName.includes(searchLower) || orderId.includes(searchLower) || mobileNumber.includes(searchLower);
           });
 
           // Only use filtered data if it seems like API didn't filter
@@ -353,6 +358,12 @@ export default function OrderManagement() {
             {order.user?.name || "N/A"}
           </td>
         );
+      case "mobileNumber":
+        return (
+          <td className="py-3 px-6 text-sm text-gray-700">
+            {order.user?.mobileNumber || "N/A"}
+          </td>
+        );
       case "date":
         return (
           <td className="py-3 px-6 text-sm text-gray-700">
@@ -440,7 +451,7 @@ export default function OrderManagement() {
           <div className="col-span-1 flex justify-center items-center gap-4">
             <div className="relative">
               <Input
-                placeholder="Search by name or order ID"
+                placeholder="Search by name, mobile, or order ID"
                 className="pl-10 pr-4 rounded-full bg-[#FDEBE6] text-sm w-64 border-0 focus:ring-2 focus:ring-[#f48c83]"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}

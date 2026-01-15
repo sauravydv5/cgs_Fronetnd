@@ -186,14 +186,10 @@ export default function NewBill() {
           const firstBill = response.bills[0];
           const customerName =
             firstBill.customerName || firstBill.customerId?.name;
-          const customerCode =
-            firstBill.customerCode || firstBill.customerId?.customerCode;
-
+        
           if (customerName) {
-            setCustomerInfo({
-              name: customerName,
-              code: customerCode || "",
-            });
+             // Only update the name. The code is already set from location.state and is more reliable.
+            setCustomerInfo((prev) => ({ ...prev, name: customerName }));
           }
 
           // Flatten items from ALL bills, not just the first one
@@ -619,7 +615,7 @@ export default function NewBill() {
     }
   };
 
-  const filteredRows = rows.filter((row) => {
+  const filteredRows = rows.filter((row) => { 
     const query = searchQuery.toLowerCase();
     return (
       (row.itemCode || "").toLowerCase().includes(query) ||
@@ -902,10 +898,7 @@ export default function NewBill() {
               </thead>
               <tbody>
                 {newBillItems.map((r, i) => (
-                  <tr
-                    key={i}
-                    className="bg-[#F9FAFB] hover:bg-[#F5F5F5] transition"
-                  >
+                  <tr key={r.id} className="bg-[#F9FAFB] hover:bg-[#F5F5F5] transition">
                     <td className="p-2">
                       <Input
                         value={r.sno || `0${i + 1}.`}

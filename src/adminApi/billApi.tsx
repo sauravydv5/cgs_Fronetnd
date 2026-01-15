@@ -36,7 +36,10 @@ export const getBillsByCustomerId = async (customerId: string) => {
 // generate a bill for a customer
 export const generateBill = async (customerId: string) => {
   try {
-    const response = await adminInstance.get(`/bills/generate/customer/${customerId}`);
+    const timezoneOffset = new Date().getTimezoneOffset();
+    const response = await adminInstance.get(`/bills/generate/customer/${customerId}`, {
+      params: { timezoneOffset }
+    });
     return response.data;
   } catch (error) {
     console.error("Error generating bill:", error);
