@@ -73,6 +73,7 @@ export default function NewBill() {
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
   const [openPopoverIndex, setOpenPopoverIndex] = useState<number | null>(null);
+  const [openNamePopoverIndex, setOpenNamePopoverIndex] = useState<number | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newBillItems, setNewBillItems] = useState<any[]>([]);
@@ -235,9 +236,10 @@ export default function NewBill() {
 
   useEffect(() => {
     // When a product popover is open, redirect page wheel scrolling to the popover
-    if (openPopoverIndex === null) return;
+    const activeIndex = openPopoverIndex !== null ? openPopoverIndex : openNamePopoverIndex;
+    if (activeIndex === null) return;
 
-    const selector = `.product-popover-content[data-row-index="${openPopoverIndex}"]`;
+    const selector = `.product-popover-content[data-row-index="${activeIndex}"]`;
 
     const onWheel = (e: WheelEvent) => {
       const pop = document.querySelector(selector) as HTMLElement | null;
@@ -259,7 +261,7 @@ export default function NewBill() {
 
     window.addEventListener("wheel", onWheel, { passive: false });
     return () => window.removeEventListener("wheel", onWheel as EventListener);
-  }, [openPopoverIndex]);
+  }, [openPopoverIndex, openNamePopoverIndex]);
 
   const SortableHeader = ({
     column,
@@ -666,7 +668,7 @@ export default function NewBill() {
 
             <div className="flex flex-wrap justify-end gap-3">
               <Button
-                onClick={handleCreateNewBillForCustomer}
+                onClick={() => navigate("/bills", { state: { openAddCustomer: true } })}
                 className="bg-[#E57373] hover:bg-[#d75a5a] text-white rounded-full px-6 py-2 shadow-md whitespace-nowrap"
               >
                 New Bill
@@ -964,14 +966,41 @@ export default function NewBill() {
                       </Popover>
                     </td>
                     <td className="p-2">
-                      <Input
-                        value={r.itemName || ""}
-                        onChange={(e) =>
-                          handleNewBillItemChange(i, "itemName", e.target.value)
+                      <Popover
+                        open={openNamePopoverIndex === i}
+                        onOpenChange={(isOpen) =>
+                          setOpenNamePopoverIndex(isOpen ? i : null)
                         }
-                        placeholder="Item Name"
-                        className="bg-white"
-                      />
+                      >
+                        <PopoverTrigger asChild>
+                          <Input
+                            value={r.itemName || ""}
+                            placeholder="Item Name"
+                            className="bg-white cursor-pointer"
+                            readOnly
+                          />
+                        </PopoverTrigger>
+                        <PopoverContent className="w-[320px] max-h-[360px] p-0 overflow-y-auto product-popover-content" data-row-index={i}>
+                          <Command>
+                            <CommandInput placeholder="Search item name..." />
+                            <CommandEmpty>No product found.</CommandEmpty>
+                            <CommandGroup>
+                              {products.map((product) => (
+                                <CommandItem
+                                  key={product._id}
+                                  value={product.productName}
+                                  onSelect={() => {
+                                    handleNewBillProductSelect(product, i);
+                                    setOpenNamePopoverIndex(null);
+                                  }}
+                                >
+                                  {product.productName}
+                                </CommandItem>
+                              ))}
+                            </CommandGroup>
+                          </Command>
+                        </PopoverContent>
+                      </Popover>
                     </td>
                     <td className="p-2">
                       <Input
@@ -1090,9 +1119,10 @@ export default function NewBill() {
               </Button>
               <Button
                 onClick={handleSaveBill}
-                className="bg-[#E98C81] hover:bg-[#df7c72] text-white rounded-full px-10 py-3 font-medium shadow-md"
+                disabled={isSaving}
+                className="bg-[#E98C81] hover:bg-[#df7c72] text-white rounded-full px-10 py-3 font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {editingBillId ? "Update Bill" : "Continue"}
+                {isSaving ? "Saving..." : editingBillId ? "Update Bill" : "Continue"}
               </Button>
             </div>
           </div>

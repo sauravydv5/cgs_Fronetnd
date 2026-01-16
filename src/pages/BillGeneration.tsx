@@ -160,7 +160,10 @@ export default function BillGeneration() {
   };
 
   useEffect(() => {
-    if (location.state?.customer) {
+    if (location.state?.openAddCustomer) {
+      setIsAddCustomerOpen(true);
+      navigate(location.pathname, { replace: true });
+    } else if (location.state?.customer) {
       setSelectedCustomer(location.state.customer);
       setShowModal(true);
       navigate(location.pathname, { replace: true });

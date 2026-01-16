@@ -15,6 +15,7 @@ import {
   addCategory,
   addSubCategory,
   getAllCategories,
+  getAllSubCategories,
 } from "@/adminApi/categoryApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,7 +67,8 @@ const initialColumns = [
   { id: "sno", label: "S.No" },
   { id: "code", label: "Item Code" },
   { id: "brand", label: "Brand Name" },
-  { id: "category", label: "Category/Sub Category" },
+  { id: "category", label: "Category" },
+  { id: "subcategory", label: "Sub Category" },
   { id: "thumbnail", label: "Thumbnail" },
   { id: "name", label: "Name" },
   { id: "quantity", label: "Quantity" },
@@ -76,15 +78,26 @@ const initialColumns = [
   { id: "actions", label: "Actions" },
 ];
 
-const SortableHeader = ({ column }: { column: { id: string; label: string } }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: column.id });
+const SortableHeader = ({
+  column,
+}: {
+  column: { id: string; label: string };
+}) => {
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: column.id });
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
   return (
-    <th ref={setNodeRef} style={style} {...attributes} {...listeners} className="px-6 py-4 font-medium cursor-grab">
+    <th
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className="px-6 py-4 font-medium cursor-grab"
+    >
       {column.label}
     </th>
   );
@@ -121,6 +134,7 @@ export default function ProductManagement() {
     brandName: "",
     productName: "",
     category: "",
+    subcategory: "",
     mrp: "",
     costPrice: "",
     stock: "",
@@ -137,6 +151,7 @@ export default function ProductManagement() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [categories, setCategories] = useState<any[]>([]);
+  const [subCategories, setSubCategories] = useState<any[]>([]);
 
   const [columns, setColumns] = useState(() => {
     const savedOrder = localStorage.getItem("productTableColumnOrder");
@@ -144,14 +159,16 @@ export default function ProductManagement() {
       try {
         const savedColumns = JSON.parse(savedOrder);
         const savedColumnIds = new Set(savedColumns.map((c: any) => c.id));
-        const missingColumns = initialColumns.filter((c) => !savedColumnIds.has(c.id));
-        
+        const missingColumns = initialColumns.filter(
+          (c) => !savedColumnIds.has(c.id)
+        );
+
         const allColumns = [...savedColumns, ...missingColumns];
-        
+
         // Force 'sno' to be the first column always
         const snoColumn = allColumns.find((c) => c.id === "sno");
         const otherColumns = allColumns.filter((c) => c.id !== "sno");
-        
+
         return snoColumn ? [snoColumn, ...otherColumns] : allColumns;
       } catch (e) {
         return initialColumns;
@@ -271,17 +288,47 @@ export default function ProductManagement() {
     }
   }, []);
 
+  const fetchSubCategories = useCallback(async () => {
+    try {
+      // @ts-ignore
+      const res = await getAllSubCategories({ limit: 10000 });
+      let subCategoryData: any[] = [];
+      if (res?.data?.data?.rows && Array.isArray(res.data.data.rows)) {
+        subCategoryData = res.data.data.rows;
+      } else if (res?.data?.rows && Array.isArray(res.data.rows)) {
+        subCategoryData = res.data.rows;
+      } else if (
+        res?.data?.subcategories &&
+        Array.isArray(res.data.subcategories)
+      ) {
+        subCategoryData = res.data.subcategories;
+      } else if (res?.data?.data && Array.isArray(res.data.data)) {
+        subCategoryData = res.data.data;
+      } else if (Array.isArray(res?.data)) {
+        subCategoryData = res.data;
+      }
+      setSubCategories(subCategoryData);
+    } catch (error) {
+      toast.error("Failed to fetch sub-categories.");
+    }
+  }, []);
+
   useEffect(() => {
     fetchProducts();
     fetchCategories();
-  }, [fetchProducts, fetchCategories]);
+    fetchSubCategories();
+  }, [fetchProducts, fetchCategories, fetchSubCategories]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     if (over && active.id !== over.id) {
       setColumns((items: any[]) => {
-        const oldIndex = items.findIndex((item) => (item.id || item._id) === active.id);
-        const newIndex = items.findIndex((item) => (item.id || item._id) === over.id);
+        const oldIndex = items.findIndex(
+          (item) => (item.id || item._id) === active.id
+        );
+        const newIndex = items.findIndex(
+          (item) => (item.id || item._id) === over.id
+        );
         return arrayMove(items, oldIndex, newIndex);
       });
     }
@@ -321,6 +368,7 @@ export default function ProductManagement() {
         brandName: formData.brandName,
         productName: formData.productName,
         category: formData.category,
+        subcategory: formData.subcategory || null,
         mrp: parseFloat(formData.mrp),
         costPrice: parseFloat(formData.costPrice),
         stock: parseInt(formData.stock),
@@ -363,6 +411,7 @@ export default function ProductManagement() {
           brandName: "",
           productName: "",
           category: "",
+          subcategory: "",
           mrp: "",
           costPrice: "",
           stock: "",
@@ -433,7 +482,6 @@ export default function ProductManagement() {
       return;
     }
     try {
-      // @ts-ignore
       await addCategory({
         name: newCategoryName,
       });
@@ -456,16 +504,17 @@ export default function ProductManagement() {
       return;
     }
     try {
-      // @ts-ignore
+      // Call addSubCategory API
       await addSubCategory({
         name: newSubCategoryName,
-        parent: parentCategoryId,
+        category: parentCategoryId,
       });
       toast.success("Sub-category added successfully!");
       setAddSubCategoryDialogOpen(false);
       setNewSubCategoryName("");
       setParentCategoryId("");
       await fetchCategories();
+      await fetchSubCategories();
     } catch (err: any) {
       toast.error(err.response?.data?.message || "Failed to add sub-category");
     }
@@ -481,6 +530,7 @@ export default function ProductManagement() {
       brandName: "",
       productName: "",
       category: "",
+      subcategory: "",
       mrp: "",
       costPrice: "",
       stock: "",
@@ -499,12 +549,44 @@ export default function ProductManagement() {
     setEditingProduct(null);
   };
 
+  // Update handleEdit function
   const handleEdit = (product: any) => {
     setEditingProduct(product);
+
+    const pCat = product.category;
+    const sCat = product.subcategory;
+
+    let parentCatId = "";
+    let subCatId = "";
+
+    // 1. Try to get IDs directly
+    if (pCat) parentCatId = typeof pCat === 'object' ? pCat._id : pCat;
+    if (sCat) subCatId = typeof sCat === 'object' ? sCat._id : sCat;
+
+    // 2. If we have a subcategory but no parent, try to find parent from subcategory list
+    if (!parentCatId && subCatId) {
+      const sub = subCategories.find(s => s._id === subCatId);
+      if (sub) {
+        const p = sub.parent || sub.category;
+        if (p) parentCatId = typeof p === 'object' ? p._id : p;
+      }
+    }
+
+    // 3. Fallback: Check if the 'category' field actually holds a subcategory ID (legacy/mixed data)
+    if (!subCatId && parentCatId) {
+      const subAsCat = subCategories.find(s => s._id === parentCatId);
+      if (subAsCat) {
+        subCatId = parentCatId;
+        const p = subAsCat.parent || subAsCat.category;
+        if (p) parentCatId = typeof p === 'object' ? p._id : p;
+      }
+    }
+
     setFormData({
       brandName: product.brandName || "",
       productName: product.productName || "",
-      category: product.category?._id || "",
+      category: parentCatId,
+      subcategory: subCatId,
       mrp: product.mrp?.toString() || "",
       costPrice: product.costPrice?.toString() || "",
       stock: product.stock?.toString() || "",
@@ -663,8 +745,12 @@ export default function ProductManagement() {
   };
 
   const handleCategoryChange = (value: string) => {
-    setFormData((prev) => ({ ...prev, category: value }));
+    setFormData((prev) => ({ ...prev, category: value, subcategory: "" }));
     setErrors((prev: any) => ({ ...prev, category: undefined }));
+  };
+
+  const handleSubCategoryChange = (value: string) => {
+    setFormData((prev) => ({ ...prev, subcategory: value }));
   };
 
   const handleBulkUpload = (file: File) => {
@@ -693,7 +779,7 @@ export default function ProductManagement() {
               discount: parseFloat(product.discount) || 0,
             };
             // The 'image' field from the CSV (which is a URL) will be part of the payload
-            await addProduct({ data: payload }); 
+            await addProduct({ data: payload });
           }
           toast.success("Bulk upload completed successfully!");
           await fetchProducts(); // Refresh products list
@@ -713,7 +799,7 @@ export default function ProductManagement() {
   const handleBarcodeScan = (err: any, result: any) => {
     if (result) {
       const scannedCode = result.text;
-      const foundProduct = products.find(p => p.itemCode === scannedCode);
+      const foundProduct = products.find((p) => p.itemCode === scannedCode);
       if (foundProduct) {
         handleViewDetails(foundProduct);
         // setScanBarcodeDialogOpen(false);
@@ -738,27 +824,86 @@ export default function ProductManagement() {
   const getSubCategories = () => {
     return [];
   };
-
+  // Update renderCell function for category and subcategory
   const renderCell = (product: any, columnId: string, index: number) => {
     switch (columnId) {
       case "sno":
-        return <td key={columnId} className="px-6 py-4">{startIndex + index + 1}</td>;
+        return (
+          <td key={columnId} className="px-6 py-4">
+            {startIndex + index + 1}
+          </td>
+        );
       case "code":
-        return <td key={columnId} className="px-6 py-4">{product.itemCode || "N/A"}</td>;
+        return (
+          <td key={columnId} className="px-6 py-4">
+            {product.itemCode || "N/A"}
+          </td>
+        );
       case "brand":
-        return <td key={columnId} className="px-6 py-4">{product.brandName || "N/A"}</td>;
+        return (
+          <td key={columnId} className="px-6 py-4">
+            {product.brandName || "N/A"}
+          </td>
+        );
+
       case "category":
-        const category = product.category;
-        let categoryDisplay = "N/A";
-        if (category) {
-          if (category.parent) {
-            const parentName = typeof category.parent === 'object' ? category.parent.name : '';
-            categoryDisplay = `${parentName} / ${category.name}`;
-          } else {
-            categoryDisplay = category.name;
-          }
+        const pCat = product.category;
+        const sCatRef = product.subcategory;
+        
+        // If we have a direct category object, use it
+        if (pCat && typeof pCat === 'object' && pCat.name) {
+             return <td key={columnId} className="px-6 py-4">{pCat.name}</td>;
         }
-        return <td key={columnId} className="px-6 py-4">{categoryDisplay}</td>;
+
+        // If category is null/ID, but we have a subcategory, try to find parent from subcategory
+        if (sCatRef) {
+             const sId = typeof sCatRef === 'object' ? sCatRef._id : sCatRef;
+             const sub = subCategories.find(s => s._id === sId);
+             if (sub) {
+                 const p = sub.parent || sub.category;
+                 const pId = typeof p === 'object' ? p._id : p;
+                 const parent = categories.find(c => c._id === pId);
+                 if (parent) return <td key={columnId} className="px-6 py-4">{parent.name}</td>;
+             }
+        }
+        
+        // Fallback: Check if pCat ID is actually a subcategory ID
+        if (pCat) {
+             const pId = typeof pCat === 'object' ? pCat._id : pCat;
+             const subAsCat = subCategories.find(s => s._id === pId);
+             if (subAsCat) {
+                 const p = subAsCat.parent || subAsCat.category;
+                 const pIdReal = typeof p === 'object' ? p._id : p;
+                 const parent = categories.find(c => c._id === pIdReal);
+                 if (parent) return <td key={columnId} className="px-6 py-4">{parent.name}</td>;
+             }
+             // If it's just a category ID, try to find it in categories list
+             const cat = categories.find(c => c._id === pId);
+             if (cat) return <td key={columnId} className="px-6 py-4">{cat.name}</td>;
+        }
+        
+        return <td key={columnId} className="px-6 py-4">N/A</td>;
+
+      case "subcategory":
+        const sCat = product.category;
+        const realSub = product.subcategory;
+
+        // If we have a direct subcategory object/ID
+        if (realSub) {
+             if (typeof realSub === 'object' && realSub.name) return <td key={columnId} className="px-6 py-4">{realSub.name}</td>;
+             const sub = subCategories.find(s => s._id === realSub);
+             if (sub) return <td key={columnId} className="px-6 py-4">{sub.name}</td>;
+        }
+        
+        // Fallback: Check if 'category' field holds the subcategory
+        if (sCat) {
+             const sId = typeof sCat === 'object' ? sCat._id : sCat;
+             const subObj = subCategories.find(s => s._id === sId);
+             if (subObj) return <td key={columnId} className="px-6 py-4">{subObj.name}</td>;
+        }
+        
+        return <td key={columnId} className="px-6 py-4">N/A</td>;
+
       case "thumbnail":
         return (
           <td key={columnId} className="px-6 py-4">
@@ -776,19 +921,37 @@ export default function ProductManagement() {
           </td>
         );
       case "name":
-        return <td key={columnId} className="px-6 py-4">{product.productName || "N/A"}</td>;
+        return (
+          <td key={columnId} className="px-6 py-4">
+            {product.productName || "N/A"}
+          </td>
+        );
       case "quantity":
-        return <td key={columnId} className="px-6 py-4">{product.stock || 0}</td>;
+        return (
+          <td key={columnId} className="px-6 py-4">
+            {product.stock || 0}
+          </td>
+        );
       case "price":
-        return <td key={columnId} className="px-6 py-4">₹{product.mrp || 0}</td>;
+        return (
+          <td key={columnId} className="px-6 py-4">
+            ₹{product.mrp || 0}
+          </td>
+        );
       case "stock":
         const isLowStock = (product.stock ?? 0) <= 10;
         return (
           <td key={columnId} className="px-6 py-4">
             <span
-              className={isLowStock ? "text-red-600 font-medium" : "text-green-600"}
+              className={
+                isLowStock ? "text-red-600 font-medium" : "text-green-600"
+              }
             >
-              {product.stock > 0 ? (isLowStock ? `Low Stock (${product.stock})` : "In-stock") : "Out of stock"}
+              {product.stock > 0
+                ? isLowStock
+                  ? `Low Stock (${product.stock})`
+                  : "In-stock"
+                : "Out of stock"}
             </span>
           </td>
         );
@@ -877,7 +1040,7 @@ export default function ProductManagement() {
             <Plus className="w-4 h-4 mr-2" />
             Add Product
           </Button>
-        {/* <Button
+          {/* <Button
             variant="secondary"
             className="rounded-full"
             onClick={() => setScanBarcodeDialogOpen(true)}
@@ -912,7 +1075,10 @@ export default function ProductManagement() {
             >
               <table className="w-full">
                 <thead className="border-b border-border">
-                  <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
+                  <SortableContext
+                    items={columnIds}
+                    strategy={horizontalListSortingStrategy}
+                  >
                     <tr className="text-left text-sm text-muted-foreground">
                       {columns.map((column) => (
                         <SortableHeader key={column.id} column={column} />
@@ -923,29 +1089,44 @@ export default function ProductManagement() {
                 <tbody className="divide-y divide-border">
                   {loadingProducts ? (
                     <tr>
-                      <td colSpan={columns.length} className="text-center py-10">
+                      <td
+                        colSpan={columns.length}
+                        className="text-center py-10"
+                      >
                         Loading products...
                       </td>
                     </tr>
                   ) : currentProducts.length > 0 ? (
                     currentProducts.map((product, index) => (
-                      <tr key={product.id || product._id} className="text-sm hover:bg-muted/50">
-                        {columns.map((col) => renderCell(product, col.id, index))}
+                      <tr
+                        key={product.id || product._id}
+                        className="text-sm hover:bg-muted/50"
+                      >
+                        {columns.map((col) =>
+                          renderCell(product, col.id, index)
+                        )}
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={columns.length} className="text-center py-10">
+                      <td
+                        colSpan={columns.length}
+                        className="text-center py-10"
+                      >
                         <div className="flex flex-col items-center gap-2">
                           <p className="text-muted-foreground">
                             {searchQuery
                               ? "No products match your search."
                               : "No products found."}
                           </p>
-                          <Button variant="outline" size="sm" onClick={() => {
-                            resetForm();
-                            setShowForm(true);
-                          }}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => {
+                              resetForm();
+                              setShowForm(true);
+                            }}
+                          >
                             Add Your First Product
                           </Button>
                         </div>
@@ -960,8 +1141,8 @@ export default function ProductManagement() {
           {products.length > 0 && (
             <div className="flex items-center justify-between px-6 py-4 border-t border-border">
               <div className="text-sm text-muted-foreground">
-                Showing {startIndex + 1} to {endIndex} of {filteredProducts.length}{" "}
-                entries
+                Showing {startIndex + 1} to {endIndex} of{" "}
+                {filteredProducts.length} entries
               </div>
               <div className="flex gap-2">
                 <Button
@@ -1063,6 +1244,7 @@ export default function ProductManagement() {
               {[
                 { label: "Product Name", name: "productName", required: true },
                 { label: "Brand Name", name: "brandName" },
+                { label: "Category", name: "category", required: true },
                 {
                   label: "MRP",
                   name: "mrp",
@@ -1118,63 +1300,97 @@ export default function ProductManagement() {
                   placeholder: "e.g., 1, 6, 12",
                 },
               ].map((field) => (
-                <div key={field.name} className="grid gap-2">
-                  <Label htmlFor={field.name}>
-                    {field.label}
-                    {field.required && (
-                      <span className="text-error ml-1">*</span>
-                    )}
-                  </Label>
-                  <Input
-                    id={field.name}
-                    name={field.name}
-                    type={field.type || "text"}
-                    placeholder={
-                      field.placeholder || `Enter ${field.label.toLowerCase()}`
-                    }
-                    value={formData[field.name as keyof typeof formData]}
-                    onChange={handleFormChange}
-                  />
-                  {errors[field.name] && (
+                <div
+                  key={field.name}
+                  className={`grid gap-2 ${
+                    field.name === "category" ? "sm:col-span-2" : ""
+                  }`}
+                >
+                  {field.name !== "category" && (
+                    <Label htmlFor={field.name}>
+                      {field.label}
+                      {field.required && (
+                        <span className="text-error ml-1">*</span>
+                      )}
+                    </Label>
+                  )}
+                  {field.name === "category" ? (
+                    <>
+                      <div className="sm:col-span-2">
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="grid gap-2">
+                            <Label>
+                              Category{" "}
+                              <span className="text-error ml-1">*</span>
+                            </Label>
+                            <Select
+                              onValueChange={handleCategoryChange}
+                              value={formData.category}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a category" />
+                              </SelectTrigger>
+                              <SelectContent className="category-select-content max-h-[360px] overflow-y-auto">
+                                {categories
+                                  .filter((c) => !c.parent)
+                                  .map((cat) => (
+                                    <SelectItem key={cat._id} value={cat._id}>
+                                      {cat.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                            {errors.category && (
+                              <p className="text-xs text-error mt-1">
+                                {errors.category}
+                              </p>
+                            )}
+                          </div>
+                          <div className="grid gap-2">
+                            <Label>Sub Category</Label>
+                            <Select
+                              onValueChange={handleSubCategoryChange}
+                              value={formData.subcategory}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select a sub-category" />
+                              </SelectTrigger>
+                              <SelectContent className="category-select-content max-h-[360px] overflow-y-auto">
+                                {subCategories
+                                  .filter(sub => {
+                                    const parentRef = sub.parent || sub.category;
+                                    const pId = typeof parentRef === 'object' ? parentRef?._id : parentRef;
+                                    return pId === formData.category;
+                                  })
+                                  .map((sub) => (
+                                    <SelectItem key={sub._id} value={sub._id}>
+                                      {sub.name}
+                                    </SelectItem>
+                                  ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  ) : (
+                    <Input
+                      id={field.name}
+                      name={field.name}
+                      type={field.type || "text"}
+                      placeholder={
+                        field.placeholder ||
+                        `Enter ${field.label.toLowerCase()}`
+                      }
+                      value={formData[field.name as keyof typeof formData]}
+                      onChange={handleFormChange}
+                    />
+                  )}
+                  {field.name !== "category" && errors[field.name] && (
                     <p className="text-xs text-error">{errors[field.name]}</p>
                   )}
                 </div>
               ))}
-
-              {/* Category Dropdown */}
-              <div className="grid gap-2">
-                <Label htmlFor="category">
-                  Category<span className="text-error ml-1">*</span>
-                </Label>
-                <Select
-                  onValueChange={handleCategoryChange}
-                  value={formData.category}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a category" />
-                  </SelectTrigger>
-                  <SelectContent className="category-select-content max-h-[360px] overflow-y-auto">
-                    {categories.filter(c => !c.parent).map(category => (
-                      <React.Fragment key={category._id}>
-                        <SelectItem value={category._id}>
-                          {category.name}
-                        </SelectItem>
-                        {categories.filter(sub => {
-                          const parentId = sub.parent && typeof sub.parent === 'object' ? sub.parent._id : sub.parent;
-                          return parentId === category._id;
-                        }).map(sub => (
-                          <SelectItem key={sub._id} value={sub._id}>
-                            <span className="ml-4">{sub.name}</span>
-                          </SelectItem>
-                        ))}
-                      </React.Fragment>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {errors.category && (
-                  <p className="text-xs text-error">{errors.category}</p>
-                )}
-              </div>
               <div className="grid gap-2 sm:col-span-2">
                 <Label htmlFor="description">Description</Label>
                 <Textarea
@@ -1295,6 +1511,7 @@ export default function ProductManagement() {
       </Dialog>
 
       {/* View Product Details Dialog */}
+      {/* View Product Details Dialog */}
       <Dialog
         open={viewDetailsDialogOpen}
         onOpenChange={setViewDetailsDialogOpen}
@@ -1313,7 +1530,9 @@ export default function ProductManagement() {
                 {/* Left Column: Image & Barcode */}
                 <div className="md:col-span-1 space-y-6">
                   <div className="space-y-2">
-                    <Label className="text-muted-foreground">Product Image</Label>
+                    <Label className="text-muted-foreground">
+                      Product Image
+                    </Label>
                     {productToView.image ? (
                       <div className="aspect-square w-full bg-muted rounded-lg flex items-center justify-center overflow-hidden border">
                         <img
@@ -1331,14 +1550,16 @@ export default function ProductManagement() {
                   <div className="space-y-2">
                     <Label className="text-muted-foreground">Barcode</Label>
                     <div className="bg-white p-4 rounded-lg border flex flex-col items-center">
-                    <Barcode
-                      value={productToView.itemCode || "NO-CODE"}
-                      width={1.5}
-                      height={60}
-                      fontSize={14}
+                      <Barcode
+                        value={productToView.itemCode || "NO-CODE"}
+                        width={1.5}
+                        height={60}
+                        fontSize={14}
                         displayValue={false}
-                    />
-                      <p className="mt-2 text-xs text-muted-foreground tracking-widest">{productToView.itemCode || "N/A"}</p>
+                      />
+                      <p className="mt-2 text-xs text-muted-foreground tracking-widest">
+                        {productToView.itemCode || "N/A"}
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1348,38 +1569,67 @@ export default function ProductManagement() {
                   {/* Header */}
                   <div>
                     <Badge
-                      variant={productToView.stock > 0 ? "default" : "destructive"}
-                      className={productToView.stock > 0 ? "bg-green-100 text-green-800" : ""}
+                      variant={
+                        productToView.stock > 0 ? "default" : "destructive"
+                      }
+                      className={
+                        productToView.stock > 0
+                          ? "bg-green-100 text-green-800"
+                          : ""
+                      }
                     >
                       {productToView.stock > 0 ? "In Stock" : "Out of Stock"}
                     </Badge>
-                    <h2 className="text-2xl font-bold mt-2">{productToView.productName}</h2>
-                    <p className="text-muted-foreground">{productToView.brandName || "No Brand"}</p>
+                    <h2 className="text-2xl font-bold mt-2">
+                      {productToView.productName}
+                    </h2>
+                    <p className="text-muted-foreground">
+                      {productToView.brandName || "No Brand"}
+                    </p>
                   </div>
 
                   {/* General Info */}
+                  {/* In View Details Dialog - General Information section */}
                   <div className="border-t pt-4">
                     <h3 className="font-semibold mb-3">General Information</h3>
                     <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                       <div className="flex flex-col">
                         <span className="text-muted-foreground">Category</span>
-                        <span className="font-medium">{productToView.category?.name || "N/A"}</span>
+                        <span className="font-medium">
+                          {productToView?.category?.name || "N/A"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">
+                          Sub Category
+                        </span>
+                        <span className="font-medium">
+                          {productToView?.subcategory?.name || "N/A"}
+                        </span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-muted-foreground">Item Code</span>
-                        <span className="font-medium">{productToView.itemCode || "N/A"}</span>
+                        <span className="font-medium">
+                          {productToView?.itemCode || "N/A"}
+                        </span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-muted-foreground">HSN Code</span>
-                        <span className="font-medium">{productToView.hsnCode || "N/A"}</span>
+                        <span className="font-medium">
+                          {productToView?.hsnCode || "N/A"}
+                        </span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-muted-foreground">Size</span>
-                        <span className="font-medium">{productToView.size || "N/A"}</span>
+                        <span className="font-medium">
+                          {productToView?.size || "N/A"}
+                        </span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-muted-foreground">Pack Size</span>
-                        <span className="font-medium">{productToView.packSize || "N/A"}</span>
+                        <span className="font-medium">
+                          {productToView?.packSize || "N/A"}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1390,23 +1640,35 @@ export default function ProductManagement() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-sm">
                       <div className="flex flex-col">
                         <span className="text-muted-foreground">MRP</span>
-                        <span className="font-medium">₹{productToView.mrp?.toFixed(2) || "0.00"}</span>
+                        <span className="font-medium">
+                          ₹{productToView.mrp?.toFixed(2) || "0.00"}
+                        </span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-muted-foreground">Cost Price</span>
-                        <span className="font-medium">₹{productToView.costPrice?.toFixed(2) || "0.00"}</span>
+                        <span className="text-muted-foreground">
+                          Cost Price
+                        </span>
+                        <span className="font-medium">
+                          ₹{productToView.costPrice?.toFixed(2) || "0.00"}
+                        </span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-muted-foreground">Discount</span>
-                        <span className="font-medium">{productToView.discount || "0"}%</span>
+                        <span className="font-medium">
+                          {productToView.discount || "0"}%
+                        </span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-muted-foreground">GST</span>
-                        <span className="font-medium">{productToView.gst || "0"}%</span>
+                        <span className="font-medium">
+                          {productToView.gst || "0"}%
+                        </span>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-muted-foreground">Stock</span>
-                        <span className="font-medium">{productToView.stock || "0"}</span>
+                        <span className="font-medium">
+                          {productToView.stock || "0"}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -1487,33 +1749,48 @@ export default function ProductManagement() {
 
       {/* Bulk Upload Dialog */}
 
-<Dialog open={bulkUploadDialogOpen} onOpenChange={setBulkUploadDialogOpen}>
-  <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
-    <DialogHeader>
-      <DialogTitle className="flex items-center gap-2">
-        <Upload className="w-5 h-5" />
-        Bulk Upload Products
-      </DialogTitle>
-      <DialogDescription className="space-y-2">
-        <p>Upload a CSV file to add multiple products at once.</p>
-        <div className="bg-muted p-3 rounded-md text-xs space-y-2 mt-3">
-          <p className="font-semibold">Required CSV Headers:</p>
-          <code className="block bg-background p-2 rounded text-[10px] overflow-x-auto">
-            productName,brandName,category,mrp,costPrice,stock,itemCode,gst,hsnCode,size,discount,packSize,image
-          </code>
-          <div className="text-[11px] text-muted-foreground space-y-1 mt-2">
-            <p>• <strong>Required fields:</strong> productName, category, mrp, costPrice</p>
-            <p>• <strong>category:</strong> Use exact category name from your system</p>
-            <p>• <strong>image:</strong> Provide direct image URL (optional)</p>
-            <p>• <strong>Numbers:</strong> mrp, costPrice, stock, gst, discount should be numeric</p>
-          </div>
-        </div>
-      </DialogDescription>
-    </DialogHeader>
+      <Dialog
+        open={bulkUploadDialogOpen}
+        onOpenChange={setBulkUploadDialogOpen}
+      >
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Upload className="w-5 h-5" />
+              Bulk Upload Products
+            </DialogTitle>
+            <DialogDescription className="space-y-2">
+              <p>Upload a CSV file to add multiple products at once.</p>
+              <div className="bg-muted p-3 rounded-md text-xs space-y-2 mt-3">
+                <p className="font-semibold">Required CSV Headers:</p>
+                <code className="block bg-background p-2 rounded text-[10px] overflow-x-auto">
+                  productName,brandName,category,mrp,costPrice,stock,itemCode,gst,hsnCode,size,discount,packSize,image
+                </code>
+                <div className="text-[11px] text-muted-foreground space-y-1 mt-2">
+                  <p>
+                    • <strong>Required fields:</strong> productName, category,
+                    mrp, costPrice
+                  </p>
+                  <p>
+                    • <strong>category:</strong> Use exact category name from
+                    your system
+                  </p>
+                  <p>
+                    • <strong>image:</strong> Provide direct image URL
+                    (optional)
+                  </p>
+                  <p>
+                    • <strong>Numbers:</strong> mrp, costPrice, stock, gst,
+                    discount should be numeric
+                  </p>
+                </div>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
 
-    <div className="space-y-4 py-4 overflow-y-auto px-1">
-      {/* Download Sample Template Button */}
-      {/* <div className="flex justify-end">
+          <div className="space-y-4 py-4 overflow-y-auto px-1">
+            {/* Download Sample Template Button */}
+            {/* <div className="flex justify-end">
         <Button
           variant="outline"
           size="sm"
@@ -1525,90 +1802,102 @@ export default function ProductManagement() {
         </Button>
       </div> */}
 
-      {/* Upload Area */}
-    
-      <div
-        className="py-12 border-2 border-dashed border-[#E98C81] bg-[#fdebe3] rounded-lg flex flex-col items-center justify-center text-center hover:bg-[#f9e5dc] transition-colors cursor-pointer relative"
-        onDragOver={(e) => {
-          e.preventDefault();
-          e.currentTarget.classList.add('border-[#E98C81]', 'bg-[#f9e5dc]');
-        }}
-        onDragLeave={(e) => {
-          e.currentTarget.classList.remove('border-[#E98C81]', 'bg-[#f9e5dc]');
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          e.currentTarget.classList.remove('border-[#E98C81]', 'bg-[#f9e5dc]');
-          if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            const file = e.dataTransfer.files[0];
-            if (file.name.endsWith('.csv')) {
-              handleBulkUpload(file);
-            } else {
-              toast.error("Please upload a CSV file");
-            }
-          }
-        }}
-      >
-        <Upload className="w-12 h-12 text-[#E98C81] mb-3" />
-        <p className="font-semibold text-lg mb-1">Drag & drop your CSV file here</p>
-        <p className="text-sm text-muted-foreground mb-3">or</p>
-        <Input
-          type="file"
-          accept=".csv"
-          className="hidden"
-          id="csv-upload"
-          onChange={(e) => {
-            if (e.target.files && e.target.files[0]) {
-              handleBulkUpload(e.target.files[0]);
-            }
-          }}
-        />
-        <label htmlFor="csv-upload">
-          <Button
-            type="button"
-            variant="default"
-            className="bg-[#E98C81] hover:bg-[#d67b70] cursor-pointer"
-            onClick={(e) => {
-              e.preventDefault();
-              document.getElementById('csv-upload')?.click();
-            }}
-          >
-            <Upload className="w-4 h-4 mr-2" />
-            Browse for a file
-          </Button>
-        </label>
-        <p className="text-xs text-muted-foreground mt-3">Maximum file size: 5MB</p>
-      </div>
+            {/* Upload Area */}
 
-      {/* Instructions */}
-      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-        <h4 className="font-semibold text-sm text-blue-900 mb-2">📋 Upload Instructions:</h4>
-        <ul className="text-xs text-blue-800 space-y-1 list-disc list-inside">
-          <li>Ensure all required fields are filled in your CSV</li>
-          <li>Category names must match existing categories exactly</li>
-          <li>Use proper number formats (no currency symbols)</li>
-          <li>Image URLs should be direct links to images</li>
-          <li>Upload may take time for large files - please wait</li>
-        </ul>
-      </div>
-    </div>
+            <div
+              className="py-12 border-2 border-dashed border-[#E98C81] bg-[#fdebe3] rounded-lg flex flex-col items-center justify-center text-center hover:bg-[#f9e5dc] transition-colors cursor-pointer relative"
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.add(
+                  "border-[#E98C81]",
+                  "bg-[#f9e5dc]"
+                );
+              }}
+              onDragLeave={(e) => {
+                e.currentTarget.classList.remove(
+                  "border-[#E98C81]",
+                  "bg-[#f9e5dc]"
+                );
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.currentTarget.classList.remove(
+                  "border-[#E98C81]",
+                  "bg-[#f9e5dc]"
+                );
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                  const file = e.dataTransfer.files[0];
+                  if (file.name.endsWith(".csv")) {
+                    handleBulkUpload(file);
+                  } else {
+                    toast.error("Please upload a CSV file");
+                  }
+                }
+              }}
+            >
+              <Upload className="w-12 h-12 text-[#E98C81] mb-3" />
+              <p className="font-semibold text-lg mb-1">
+                Drag & drop your CSV file here
+              </p>
+              <p className="text-sm text-muted-foreground mb-3">or</p>
+              <Input
+                type="file"
+                accept=".csv"
+                className="hidden"
+                id="csv-upload"
+                onChange={(e) => {
+                  if (e.target.files && e.target.files[0]) {
+                    handleBulkUpload(e.target.files[0]);
+                  }
+                }}
+              />
+              <label htmlFor="csv-upload">
+                <Button
+                  type="button"
+                  variant="default"
+                  className="bg-[#E98C81] hover:bg-[#d67b70] cursor-pointer"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    document.getElementById("csv-upload")?.click();
+                  }}
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Browse for a file
+                </Button>
+              </label>
+              <p className="text-xs text-muted-foreground mt-3">
+                Maximum file size: 5MB
+              </p>
+            </div>
 
-    <DialogFooter>
-      <Button
-        variant="outline"
-        onClick={() => setBulkUploadDialogOpen(false)}
-      >
-        Cancel
-      </Button>
-    </DialogFooter>
-  </DialogContent>
-</Dialog>
+            {/* Instructions */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <h4 className="font-semibold text-sm text-blue-900 mb-2">
+                📋 Upload Instructions:
+              </h4>
+              <ul className="text-xs text-blue-800 space-y-1 list-disc list-inside">
+                <li>Ensure all required fields are filled in your CSV</li>
+                <li>Category names must match existing categories exactly</li>
+                <li>Use proper number formats (no currency symbols)</li>
+                <li>Image URLs should be direct links to images</li>
+                <li>Upload may take time for large files - please wait</li>
+              </ul>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setBulkUploadDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Generate Barcode Dialog */}
-      <Dialog
-        open={barcodeDialogOpen}
-        onOpenChange={setBarcodeDialogOpen}
-      >
+      <Dialog open={barcodeDialogOpen} onOpenChange={setBarcodeDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1616,13 +1905,17 @@ export default function ProductManagement() {
               Generate Barcode
             </DialogTitle>
             <DialogDescription>
-              Barcode for <span className="font-bold">{barcodeProduct?.productName}</span>
+              Barcode for{" "}
+              <span className="font-bold">{barcodeProduct?.productName}</span>
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col items-center gap-6 py-6">
             {barcodeProduct && (
               <div className="flex flex-col items-center gap-4">
-                <div ref={barcodeRef} className="bg-white p-4 rounded-lg border">
+                <div
+                  ref={barcodeRef}
+                  className="bg-white p-4 rounded-lg border"
+                >
                   <Barcode
                     value={barcodeProduct.itemCode || "NO-CODE"}
                     width={2}
@@ -1631,8 +1924,12 @@ export default function ProductManagement() {
                   />
                 </div>
                 <div className="text-center space-y-1">
-                  <p className="text-sm font-medium">{barcodeProduct.productName}</p>
-                  <p className="text-xs text-muted-foreground">Item Code: {barcodeProduct.itemCode}</p>
+                  <p className="text-sm font-medium">
+                    {barcodeProduct.productName}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Item Code: {barcodeProduct.itemCode}
+                  </p>
                 </div>
 
                 <div className="flex gap-3 w-full">
@@ -1644,10 +1941,7 @@ export default function ProductManagement() {
                     <Download className="w-4 h-4 mr-2" />
                     Download
                   </Button>
-                  <Button
-                    onClick={printBarcode}
-                    className="flex-1"
-                  >
+                  <Button onClick={printBarcode} className="flex-1">
                     <Printer className="w-4 h-4 mr-2" />
                     Print
                   </Button>

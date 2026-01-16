@@ -28,14 +28,15 @@ import {
 } from "@/components/ui/select";
 import { useNavigate } from "react-router-dom";
 import { getAllProducts, updateProduct, deleteProduct, getLowStockProducts, updateLowStockSettings, updateProductStock } from "@/adminApi/productApi";
-import { getAllCategories } from "@/adminApi/categoryApi";
+import { getAllCategories, getAllSubCategories } from "@/adminApi/categoryApi";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 
 export default function InventoryTracking() {
   const navigate = useNavigate();
-  const [products, setProducts] = useState([]);
-  const [lowStockProducts, setLowStockProducts] = useState([]);
+  const [products, setProducts] = useState<any[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [formLoading, setFormLoading] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
@@ -53,12 +54,13 @@ export default function InventoryTracking() {
   const [stockUpdateProduct, setStockUpdateProduct] = useState<any>(null);
   const [newStockValue, setNewStockValue] = useState("");
   const [lowStockThreshold, setLowStockThreshold] = useState(10);
-  const [categories, setCategories] = useState([]);
+  const [categories, setCategories] = useState<any[]>([]);
+  const [subCategories, setSubCategories] = useState<any[]>([]);
   const [imagePreview, setImagePreview] = useState(null);
   const [imageFile, setImageFile] = useState(null);
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<any>({});
   const [formData, setFormData] = useState({
-    productName: "", category: "", mrp: "", costPrice: "", stock: "", gst: "",
+    productName: "", category: "", subcategory: "", mrp: "", costPrice: "", stock: "", gst: "",
     brandName: "", company: "", itemCode: "", hsnCode: "", size: "",
     discount: "", packSize: "", description: "", image: "",
   });
@@ -70,6 +72,7 @@ export default function InventoryTracking() {
     } else {
       fetchProducts();
       fetchCategories();
+      fetchSubCategories();
       fetchLowStock();
     }
   }, [navigate]);
@@ -120,11 +123,48 @@ export default function InventoryTracking() {
 
   const fetchCategories = async () => {
     try {
-      const res = await getAllCategories();
-      const categoryData = res?.data?.data?.rows || res?.data?.rows || res?.data || [];
+      // @ts-ignore
+      const res = await getAllCategories({ limit: 10000 });
+      let categoryData = [];
+      if (res?.data?.data?.rows && Array.isArray(res.data.data.rows)) {
+        categoryData = res.data.data.rows;
+      } else if (res?.data?.rows && Array.isArray(res.data.rows)) {
+        categoryData = res.data.rows;
+      } else if (res?.data?.categories && Array.isArray(res.data.categories)) {
+        categoryData = res.data.categories;
+      } else if (res?.data?.data && Array.isArray(res.data.data)) {
+        categoryData = res.data.data;
+      } else if (Array.isArray(res?.data)) {
+        categoryData = res.data;
+      }
       setCategories(Array.isArray(categoryData) ? categoryData : []);
     } catch (err) {
       console.error("Failed to fetch categories:", err);
+    }
+  };
+
+  const fetchSubCategories = async () => {
+    try {
+      // @ts-ignore
+      const res = await getAllSubCategories({ limit: 10000 });
+      let subCategoryData = [];
+      if (res?.data?.data?.rows && Array.isArray(res.data.data.rows)) {
+        subCategoryData = res.data.data.rows;
+      } else if (res?.data?.rows && Array.isArray(res.data.rows)) {
+        subCategoryData = res.data.rows;
+      } else if (
+        res?.data?.subcategories &&
+        Array.isArray(res.data.subcategories)
+      ) {
+        subCategoryData = res.data.subcategories;
+      } else if (res?.data?.data && Array.isArray(res.data.data)) {
+        subCategoryData = res.data.data;
+      } else if (Array.isArray(res?.data)) {
+        subCategoryData = res.data;
+      }
+      setSubCategories(subCategoryData);
+    } catch (err) {
+      console.error("Failed to fetch sub-categories:", err);
     }
   };
 
@@ -171,7 +211,7 @@ export default function InventoryTracking() {
 
   const resetForm = () => {
     setFormData({
-      productName: "", category: "", mrp: "", costPrice: "", stock: "", gst: "",
+      productName: "", category: "", subcategory: "", mrp: "", costPrice: "", stock: "", gst: "",
       brandName: "", company: "", itemCode: "", hsnCode: "", size: "",
       discount: "", packSize: "", description: "", image: "",
     });
@@ -182,12 +222,41 @@ export default function InventoryTracking() {
   };
 
   const handleEdit = (product) => {
+    const pCat = product.category;
+    const sCat = product.subcategory;
+
+    let parentCatId = "";
+    let subCatId = "";
+
+    if (pCat) parentCatId = typeof pCat === 'object' ? pCat._id : pCat;
+    if (sCat) subCatId = typeof sCat === 'object' ? sCat._id : sCat;
+
+    if (!parentCatId && subCatId) {
+      // @ts-ignore
+      const sub = subCategories.find(s => s._id === subCatId);
+      if (sub) {
+        const p = sub.parent || sub.category;
+        if (p) parentCatId = typeof p === 'object' ? p._id : p;
+      }
+    }
+
+    if (!subCatId && parentCatId) {
+      // @ts-ignore
+      const subAsCat = subCategories.find(s => s._id === parentCatId);
+      if (subAsCat) {
+        subCatId = parentCatId;
+        const p = subAsCat.parent || subAsCat.category;
+        if (p) parentCatId = typeof p === 'object' ? p._id : p;
+      }
+    }
+
     setEditingProduct(product);
     setFormData({
       brandName: product.brandName || "",
       productName: product.productName || "",
-      category: product.category?._id || "",
-      company: product.company || "",
+      category: parentCatId || "",
+      subcategory: subCatId || "",
+      company: product.company || "", // Kept for compatibility if needed
       mrp: product.mrp ?? "",
       costPrice: product.costPrice ?? "",
       stock: product.stock ?? "",
@@ -222,13 +291,20 @@ export default function InventoryTracking() {
     setViewingProduct(product);
   };
 
-  const handleChange = (e) => {
+  const handleFormChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData((prev) => ({ ...prev, [name]: value }));
+    if (errors[name]) {
+      setErrors((prev: any) => ({ ...prev, [name]: undefined }));
+    }
   };
 
   const handleCategoryChange = (value) => {
-    setFormData({ ...formData, category: value });
+    setFormData({ ...formData, category: value, subcategory: "" });
+  };
+
+  const handleSubCategoryChange = (value) => {
+    setFormData({ ...formData, subcategory: value });
   };
 
   const handleImageChange = (e) => {
@@ -261,6 +337,7 @@ export default function InventoryTracking() {
         brandName: formData.brandName,
         productName: formData.productName,
         category: formData.category,
+        subcategory: formData.subcategory || null,
         company: formData.company,
         mrp: parseFloat(formData.mrp) || 0, // Keep as float
         costPrice: parseFloat(formData.costPrice) || 0, // Add costPrice
@@ -353,6 +430,60 @@ export default function InventoryTracking() {
     return "text-green-600";
   };
 
+  const getCategoryName = (product: any) => {
+    const pCat = product.category;
+    const sCatRef = product.subcategory;
+    
+    if (pCat && typeof pCat === 'object' && pCat.name) {
+         return pCat.name;
+    }
+
+    if (sCatRef) {
+         const sId = typeof sCatRef === 'object' ? sCatRef._id : sCatRef;
+         const sub = subCategories.find(s => s._id === sId);
+         if (sub) {
+             const p = sub.parent || sub.category;
+             const pId = typeof p === 'object' ? p._id : p;
+             const parent = categories.find(c => c._id === pId);
+             if (parent) return parent.name;
+         }
+    }
+    
+    if (pCat) {
+         const pId = typeof pCat === 'object' ? pCat._id : pCat;
+         const subAsCat = subCategories.find(s => s._id === pId);
+         if (subAsCat) {
+             const p = subAsCat.parent || subAsCat.category;
+             const pIdReal = typeof p === 'object' ? p._id : p;
+             const parent = categories.find(c => c._id === pIdReal);
+             if (parent) return parent.name;
+         }
+         const cat = categories.find(c => c._id === pId);
+         if (cat) return cat.name;
+    }
+    
+    return "N/A";
+  };
+
+  const getSubCategoryName = (product: any) => {
+    const sCat = product.category;
+    const realSub = product.subcategory;
+
+    if (realSub) {
+         if (typeof realSub === 'object' && realSub.name) return realSub.name;
+         const sub = subCategories.find(s => s._id === realSub);
+         if (sub) return sub.name;
+    }
+    
+    if (sCat) {
+         const sId = typeof sCat === 'object' ? sCat._id : sCat;
+         const subObj = subCategories.find(s => s._id === sId);
+         if (subObj) return subObj.name;
+    }
+    
+    return "N/A";
+  };
+
   if (loading) {
     return (
       <AdminLayout title="Inventory Tracking">
@@ -389,6 +520,7 @@ export default function InventoryTracking() {
                     <th className="px-4 py-3">Item Code</th>
                     <th className="px-4 py-3">Brand</th>
                     <th className="px-4 py-3">Category</th>
+                    <th className="px-4 py-3">Sub Category</th>
                     <th className="px-4 py-3">Thumbnail</th>
                     <th className="px-4 py-3">Name</th>
                     <th className="px-4 py-3">Quantity</th>
@@ -406,7 +538,8 @@ export default function InventoryTracking() {
                         >
                           <td className="px-4 py-3">{product.itemCode || 'N/A'}</td>
                           <td className="px-4 py-3">{product.brandName || 'N/A'}</td>
-                          <td className="px-4 py-3">{product.category?.name || 'N/A'}</td>
+                          <td className="px-4 py-3">{getCategoryName(product)}</td>
+                          <td className="px-4 py-3">{getSubCategoryName(product)}</td>
                           <td className="px-4 py-3">
                             <div className="w-10 h-10 bg-gray-100 rounded-md flex items-center justify-center overflow-hidden">
                               {product.image ?
@@ -446,7 +579,7 @@ export default function InventoryTracking() {
                       ))
                     ) : (
                     <tr>
-                      <td colSpan={9} className="px-4 py-6 text-center text-gray-500">
+                      <td colSpan={10} className="px-4 py-6 text-center text-gray-500">
                         No products found
                       </td>
                     </tr>
@@ -517,7 +650,7 @@ export default function InventoryTracking() {
                         <div>
                           <h3 className="font-medium text-sm">{product.productName || 'N/A'}</h3>
                           <p className="text-xs text-gray-500">
-                            {product.brandName || 'N/A'} • {product.category?.name || 'N/A'}
+                            {product.brandName || 'N/A'} • {getCategoryName(product)} / {getSubCategoryName(product)}
                           </p>
                           <p className="text-xs text-gray-400">{product.itemCode || 'N/A'}</p>
                         </div>
@@ -714,118 +847,181 @@ export default function InventoryTracking() {
       </Dialog>
 
       {/* Add/Edit Modal */}
-      {showForm && (
-        <div
-            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4"
-          >
-          <div
-              className="bg-white rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
-            >
-            <div className="p-6 border-b flex justify-between items-center">
-              <h2 className="text-xl font-semibold">
-                {editingProduct ? "Edit Product" : "Add Product"}
-              </h2>
-              <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setShowForm(false);
-                    setEditingProduct(null);
-                    resetForm();
-                  }}
-                  className="h-8 w-8 p-0"
-                >
-                  <X className="w-4 h-4 sm:w-5 sm:h-5" />
-                </Button>
-            </div>
-            <div className="p-6 space-y-4 overflow-y-auto">
-              <div className="space-y-2">
-                <label className="block text-sm font-medium mb-2">Product Image</label>
-                <div className="border-2 border-dashed border-[#119D82] rounded-lg p-6 text-center">
-                  <label htmlFor="image-upload" className="cursor-pointer flex flex-col items-center justify-center space-y-3">
-                    {imagePreview ? (
-                      <img src={imagePreview} alt="Preview" className="w-32 h-32 object-cover rounded-md border" />
-                    ) : (
-                      <>
-                        <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
-                          <ImageIcon className="w-6 h-6 text-gray-400" />
-                        </div>
-                        <span className="text-[#119D82] font-medium text-sm">Click to upload</span>
-                        <p className="text-xs text-gray-500">PNG, JPG, or WEBP</p>
-                      </>
-                    )}
-                  </label>
-                  <input id="image-upload" type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-                  {imagePreview && (
-                    <div className="mt-3"><Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={removeImage}>Remove</Button></div>
+      <Dialog open={showForm} onOpenChange={(open) => {
+        setShowForm(open);
+        if (!open) {
+          setEditingProduct(null);
+          resetForm();
+        }
+      }}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
+          <DialogHeader>
+            <DialogTitle>{editingProduct ? "Edit Product" : "Add Product"}</DialogTitle>
+            <DialogDescription>
+              {editingProduct ? "Make changes to the product details here." : "Enter details for the new product."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4 overflow-y-auto px-1">
+            <div className="space-y-2">
+              <Label>Product Image</Label>
+              <div className="border-2 border-dashed border-[#119D82] rounded-lg p-6 text-center">
+                <label htmlFor="image-upload" className="cursor-pointer flex flex-col items-center justify-center space-y-3">
+                  {imagePreview ? (
+                    <img src={imagePreview} alt="Preview" className="w-32 h-32 object-cover rounded-md border" />
+                  ) : (
+                    <>
+                      <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center">
+                        <ImageIcon className="w-6 h-6 text-gray-400" />
+                      </div>
+                      <span className="text-[#119D82] font-medium text-sm">Click to upload</span>
+                      <p className="text-xs text-gray-500">PNG, JPG, or WEBP</p>
+                    </>
                   )}
-                </div>
+                </label>
+                <input id="image-upload" type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+                {imagePreview && (
+                  <div className="mt-3"><Button variant="ghost" size="sm" className="text-red-500 hover:text-red-600" onClick={removeImage}>Remove</Button></div>
+                )}
               </div>
+            </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  { label: "Item Code", name: "itemCode" },
-                  { label: "Brand Name", name: "brandName" },
-                  { label: "Product Name", name: "productName", required: true },
-                  { label: "Category", name: "category", required: true },
-                  { label: "Company", name: "company" },
-                  { label: "MRP", name: "mrp", type: "number", required: true },
-                  { label: "Cost Price", name: "costPrice", type: "number" },
-                  { label: "Stock", name: "stock", type: "number", required: true },
-                  { label: "GST %", name: "gst", type: "number" },
-                  { label: "HSN Code", name: "hsnCode" },
-                  { label: "Size", name: "size" },
-                  { label: "Discount %", name: "discount", type: "number" },
-                  { label: "Pack Size", name: "packSize" },
-                ].map((field) => (
-                  <div key={field.name}>
-                    <label className="block text-sm font-medium mb-1">
-                      {field.label} {field.required && <span className="text-red-500">*</span>}
-                    </label>
-                    {field.name === "category" ? (
-                      <Select onValueChange={handleCategoryChange} value={formData.category}>
-                        <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
-                        <SelectContent>
-                          {categories.map((cat) => (
-                            <SelectItem key={cat._id} value={cat._id}>{cat.name}</SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {[
+                { label: "Product Name", name: "productName", required: true },
+                { label: "Brand Name", name: "brandName" },
+                { label: "Category", name: "category", required: true },
+                {
+                  label: "MRP",
+                  name: "mrp",
+                  type: "number",
+                  required: true,
+                  placeholder: "e.g., 199.99",
+                },
+                {
+                  label: "Cost Price",
+                  name: "costPrice",
+                  type: "number",
+                  required: true,
+                  placeholder: "Cost Price",
+                },
+                {
+                  label: "Stock",
+                  name: "stock",
+                  type: "number",
+                  required: true,
+                  placeholder: "e.g., 100",
+                },
+                {
+                  label: "Item Code",
+                  name: "itemCode",
+                  placeholder: "for eg., CGS1234",
+                },
+                {
+                  label: "GST %",
+                  name: "gst",
+                  type: "number",
+                  required: true,
+                  placeholder: "e.g., 18",
+                },
+                {
+                  label: "HSN Code",
+                  name: "hsnCode",
+                  placeholder: "e.g., 12345678",
+                },
+                {
+                  label: "Size",
+                  name: "size",
+                  placeholder: "e.g., Small, Medium, Large",
+                },
+                {
+                  label: "Discount %",
+                  name: "discount",
+                  type: "number",
+                  placeholder: "e.g., 10",
+                },
+                {
+                  label: "Pack Size",
+                  name: "packSize",
+                  placeholder: "e.g., 1, 6, 12",
+                },
+              ].map((field) => (
+                <div key={field.name} className={field.name === "category" ? "sm:col-span-2" : "grid gap-2"}>
+                  {field.name === "category" ? (
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="grid gap-2">
+                        <Label>
+                          Category{" "}
+                          <span className="text-red-500">*</span>
+                        </Label>
+                        <Select onValueChange={handleCategoryChange} value={formData.category}>
+                          <SelectTrigger><SelectValue placeholder="Select a category" /></SelectTrigger>
+                          <SelectContent>
+                            {categories.filter((c: any) => !c.parent).map((cat: any) => (
+                              <SelectItem key={cat._id} value={cat._id}>{cat.name}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {errors.category && (
+                          <p className="text-xs text-red-500 mt-1">
+                            {errors.category}
+                          </p>
+                        )}
+                      </div>
+                      <div className="grid gap-2">
+                        <Label>
+                          Sub Category
+                        </Label>
+                        <Select onValueChange={handleSubCategoryChange} value={formData.subcategory}>
+                          <SelectTrigger><SelectValue placeholder="Select a sub-category" /></SelectTrigger>
+                          <SelectContent>
+                            {subCategories
+                              .filter((sub: any) => {
+                                const parentRef = sub.parent || sub.category;
+                                const pId = typeof parentRef === 'object' ? parentRef?._id : parentRef;
+                                return pId === formData.category;
+                              })
+                              .map((sub: any) => (
+                                <SelectItem key={sub._id} value={sub._id}>{sub.name}</SelectItem>
+                              ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <Label htmlFor={field.name}>
+                        {field.label} {field.required && <span className="text-red-500">*</span>}
+                      </Label>
                       <Input
+                        id={field.name}
                         name={field.name}
                         type={field.type || "text"}
-                        value={formData[field.name]}
-                        onChange={handleChange}
                         placeholder={
-                          field.name === "hsnCode"
-                            ? `Enter ${field.label.toLowerCase()} (for eg., 22011010)`
-                            : field.name === "itemCode"
-                            ? `Enter ${field.label.toLowerCase()} (for eg., CMT1234)`
-                            : field.name === "size"
-                            ? `Enter ${field.label.toLowerCase()} (for eg., small, large, medium)`
-                            : field.name === "packSize" ? `Enter ${field.label.toLowerCase()} (1, 2, 3)` : `Enter ${field.label.toLowerCase()}`
+                          field.placeholder ||
+                          `Enter ${field.label.toLowerCase()}`
                         }
+                        value={formData[field.name as keyof typeof formData]}
+                        onChange={handleFormChange}
                       />
-                    )}
-                    {errors[field.name] && <span className="text-red-500 text-xs mt-1">{errors[field.name]}</span>}
-                  </div>
-                ))}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">Description</label>
+                    </>
+                  )}
+                  {errors[field.name] && <span className="text-red-500 text-xs mt-1">{errors[field.name]}</span>}
+                </div>
+              ))}
+              <div className="grid gap-2 sm:col-span-2">
+                <Label htmlFor="description">Description</Label>
                 <Textarea
+                  id="description"
                   name="description"
-                  value={formData.description}
-                  onChange={handleChange}
                   placeholder="Enter product description"
-                  className="min-h-[100px]"
+                  value={formData.description}
+                  onChange={handleFormChange}
                 />
               </div>
             </div>
-            <div className="p-6 border-t flex justify-end gap-3 sticky bottom-0 bg-white">
-              <Button variant="outline" onClick={() => { setShowForm(false); resetForm(); }} disabled={formLoading}>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowForm(false); resetForm(); }} disabled={formLoading}>
                 Cancel
               </Button>
               <Button
@@ -835,10 +1031,9 @@ export default function InventoryTracking() {
               >
                 {formLoading ? "Saving..." : "Save Changes"}
               </Button>
-            </div>
-            </div>
-          </div>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </AdminLayout>
   );
 }

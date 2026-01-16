@@ -45,6 +45,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Tooltip,
   TooltipContent,
@@ -67,7 +68,7 @@ import {
   SelectTrigger,
 } from "@/components/ui/select";
 import { format } from "date-fns";
-import { updateBillPaymentStatus } from "@/adminApi/billApi";
+import { updateBillPaymentStatus, generateBill } from "@/adminApi/billApi";
 import { addSaleReturn } from "@/adminApi/saleReturnApi";
 
 const DraggableHeader = ({
@@ -123,7 +124,8 @@ export default function Sale() {
   const [bills, setBills] = useState<any[]>([]);
   const [allBills, setAllBills] = useState<any[]>([]); // To store all bills
   const [loading, setLoading] = useState(true);
-  const [selectedBill, setSelectedBill] = useState<any | null>(null);
+  const [generatedBillHtml, setGeneratedBillHtml] = useState<string | null>(null);
+  const [showGeneratedBill, setShowGeneratedBill] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -132,6 +134,7 @@ export default function Sale() {
   const [billToReturn, setBillToReturn] = useState<any | null>(null);
   const [returnReason, setReturnReason] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
+  const [returnItems, setReturnItems] = useState<any[]>([]);
 
   const location = useLocation();
 
@@ -253,21 +256,76 @@ export default function Sale() {
     }
   };
 
+  const handleViewBill = async (bill: any) => {
+    try {
+      const customerId = bill.customerId?._id || bill.customerId;
+      if (!customerId) {
+        toast.error("Customer ID not found for this bill.");
+        return;
+      }
+      const response = await generateBill(customerId);
+      const billDataUrl = response.url;
+      if (response.success && billDataUrl) {
+        const base64Part = billDataUrl.split(",")[1];
+        const binaryString = window.atob(base64Part);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const decodedHtml = new TextDecoder().decode(bytes);
+        setGeneratedBillHtml(decodedHtml);
+        setShowGeneratedBill(true);
+      } else {
+        toast.error(response.message || "Failed to generate bill.");
+      }
+    } catch (error: any) {
+      console.error("Error generating bill:", error);
+      toast.error("Failed to generate bill.");
+    }
+  };
+
   const handleReturnClick = (bill: any) => {
     setBillToReturn(bill);
-    setRefundAmount(bill.totalAmount || "");
+    // Initialize items with selected: false
+    const items = (bill.items || []).map((item: any) => ({
+      ...item,
+      selected: false
+    }));
+    setReturnItems(items);
+    setRefundAmount("0");
     setReturnReason("");
     setReturnModalOpen(true);
   };
 
+  const handleItemSelect = (index: number, checked: boolean) => {
+    setReturnItems((prev) => {
+      const newItems = [...prev];
+      newItems[index] = { ...newItems[index], selected: checked };
+      
+      const total = newItems.reduce((acc, item) => {
+        return item.selected ? acc + (Number(item.total) || Number(item.netAmount) || 0) : acc;
+      }, 0);
+      setRefundAmount(total.toFixed(2));
+      
+      return newItems;
+    });
+  };
+
   const handleSubmitReturn = async () => {
     if (!billToReturn) return;
+    const selectedItems = returnItems.filter((i) => i.selected);
+
+    if (selectedItems.length === 0) {
+      toast.error("Please select items to return");
+      return;
+    }
+
     try {
       await addSaleReturn({
         billId: billToReturn._id,
         reason: returnReason,
         refundAmount,
-        items: billToReturn.items || [],
+        items: selectedItems,
       });
       toast.success("Return processed successfully");
       setReturnModalOpen(false);
@@ -277,28 +335,6 @@ export default function Sale() {
       toast.error("Failed to process return.");
     }
   };
-
-  const BillDetailItem = ({
-    label,
-    value,
-    icon: Icon,
-    valueClassName,
-  }: {
-    label: string;
-    value: string | number;
-    icon?: React.ElementType;
-    valueClassName?: string;
-  }) => (
-    <div className="flex items-center space-x-3 py-3 border-b border-gray-100">
-      {Icon && <Icon className="h-5 w-5 text-[#f97a63]" />}
-      <div className="flex-1">
-        <p className="text-xs text-gray-500">{label}</p>
-        <p className={`font-semibold text-gray-800 ${valueClassName}`}>
-          {value}
-        </p>
-      </div>
-    </div>
-  );
 
   const filteredBills = bills.filter((bill) => {
     const query = searchQuery.toLowerCase();
@@ -319,173 +355,30 @@ export default function Sale() {
     <AdminLayout title="Bill Generation > Sale">
       <Toaster position="top-center" />
 
-      {/* Bill Details Modal */}
-      <Dialog open={!!selectedBill} onOpenChange={() => setSelectedBill(null)}>
-        <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto bg-white p-0 shadow-2xl">
-          <DialogHeader className="bg-gradient-to-br from-[#f97a63] via-[#f86a53] to-[#f75943] text-white p-5 rounded-t-lg relative overflow-hidden flex flex-col items-start">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
-            <div className="relative z-10">
-              <DialogTitle className="text-2xl font-extrabold tracking-tight mb-1">
-                Bill Details
-              </DialogTitle>
-              <span className="bg-white text-[#f97a63] text-sm font-bold px-7 py-1.5 rounded-full shadow-lg">
-                  #{selectedBill?.billId}
-                </span>
-            </div>
+      {/* Generated Bill Modal */}
+      <Dialog open={showGeneratedBill} onOpenChange={setShowGeneratedBill}>
+        <DialogContent className="max-w-screen-lg w-[90vw] h-[90vh] flex flex-col p-2">
+          <DialogHeader className="p-4 flex-row flex justify-between items-center">
+            <DialogTitle>Generated Bill</DialogTitle>
+            <Button
+              onClick={() => {
+                const iframe = document.getElementById(
+                  "bill-iframe"
+                ) as HTMLIFrameElement;
+                iframe?.contentWindow?.print();
+              }}
+              className="bg-[#E98C81] hover:bg-[#d97a71] text-white"
+            >
+              Save & Print
+            </Button>
           </DialogHeader>
-          {selectedBill && (
-            <div className="p-6">
-              {/* Main Info Cards */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-                {/* Agent Card */}
-                <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg p-3 border border-blue-200/50 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="bg-blue-500 rounded-lg p-2">
-                      <CircleUser className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Agent Name</p>
-                      <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedBill.agentName}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Customer Card */}
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-lg p-3 border border-purple-200/50 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="bg-purple-500 rounded-lg p-2">
-                      <User className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide">Customer Name</p>
-                      <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedBill.customerName}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Date Card */}
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-lg p-3 border border-orange-200/50 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="bg-orange-500 rounded-lg p-2">
-                      <CalendarDays className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Bill Date</p>
-                      <p className="text-sm font-bold text-gray-800 mt-0.5">
-                        {new Date(selectedBill.date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Payment Status Card */}
-                <div className={`bg-gradient-to-br ${selectedBill.paymentStatus === "PAID" ? "from-green-50 to-green-100/50 border-green-200/50" : "from-red-50 to-red-100/50 border-red-200/50"} rounded-lg p-3 border shadow-sm hover:shadow-md transition-all`}>
-                  <div className="flex items-center space-x-2.5">
-                    <div className={`${selectedBill.paymentStatus === "PAID" ? "bg-green-500" : "bg-red-500"} rounded-lg p-2`}>
-                      <BadgeIndianRupee className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className={`text-xs font-semibold ${selectedBill.paymentStatus === "PAID" ? "text-green-600" : "text-red-600"} uppercase tracking-wide`}>Payment Status</p>
-                      <p className={`text-sm font-bold mt-0.5 ${selectedBill.paymentStatus === "PAID" ? "text-green-800" : "text-red-800"}`}>
-                        {selectedBill.paymentStatus}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Order Items Section */}
-              <div className="bg-white rounded-lg border border-gray-200 mb-5 overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center">
-                    <Hash className="h-3.5 w-3.5 mr-1.5 text-gray-600" />
-                    Order Items
-                  </h3>
-                </div>
-                <div className="max-h-60 overflow-y-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-gray-500 font-medium text-xs uppercase sticky top-0">
-                      <tr>
-                        <th className="px-4 py-2">Item Name</th>
-                        <th className="px-4 py-2 text-center">Qty</th>
-                        <th className="px-4 py-2 text-right">Rate</th>
-                        <th className="px-4 py-2 text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {selectedBill.items && selectedBill.items.length > 0 ? (
-                        selectedBill.items.map((item: any, index: number) => (
-                          <tr key={index} className="hover:bg-gray-50/50">
-                            <td className="px-4 py-2">
-                              <p className="font-medium text-gray-800">{item.itemName || item.productName || "N/A"}</p>
-                              <p className="text-xs text-gray-500">{item.itemCode || ""}</p>
-                            </td>
-                            <td className="px-4 py-2 text-center">{item.qty}</td>
-                            <td className="px-4 py-2 text-right">₹{item.rate || item.mrp || 0}</td>
-                            <td className="px-4 py-2 text-right font-medium">₹{item.total || item.netAmount || 0}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={4} className="px-4 py-4 text-center text-gray-500">No items found</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Tax & Discount Section */}
-              <div className="bg-gray-50 rounded-lg p-4 mb-5 border border-gray-200">
-                <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3 flex items-center">
-                  <Hash className="h-3.5 w-3.5 mr-1.5 text-gray-600" />
-                  Tax & Discount Details
-                </h3>
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="text-center bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-                    <Percent className="h-4 w-4 text-[#f97a63] mx-auto mb-1.5" />
-                    <p className="text-xs text-gray-500 font-semibold uppercase">Discount</p>
-                    <p className="text-lg font-bold text-gray-800 mt-1">₹ {selectedBill.discount}</p>
-                  </div>
-                  <div className="text-center bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-                    <Percent className="h-4 w-4 text-blue-600 mx-auto mb-1.5" />
-                    <p className="text-xs text-gray-500 font-semibold uppercase">SGST</p>
-                    <p className="text-lg font-bold text-gray-800 mt-1">₹ {selectedBill.sgst}</p>
-                  </div>
-                  <div className="text-center bg-white rounded-lg p-3 border border-gray-200 shadow-sm">
-                    <Percent className="h-4 w-4 text-indigo-600 mx-auto mb-1.5" />
-                    <p className="text-xs text-gray-500 font-semibold uppercase">CGST</p>
-                    <p className="text-lg font-bold text-gray-800 mt-1">₹ {selectedBill.cgst}</p>
-                  </div>
-                </div>
-              </div>
-
-              {/* Amount Summary Section */}
-              <div className="bg-gradient-to-br from-[#fff4f1] via-orange-50 to-orange-100 rounded-xl p-4 border-2 border-orange-200 shadow-lg">
-                <div className="space-y-2.5">
-                  <div className="flex justify-between items-center pb-2.5 border-b-2 border-orange-300">
-                    <div className="flex items-center space-x-2">
-                      <BadgeIndianRupee className="h-5 w-5 text-[#f97a63]" />
-                      <p className="text-sm font-bold text-gray-700 uppercase tracking-wide">Total Amount</p>
-                    </div>
-                    <p className="text-2xl font-extrabold text-[#f97a63] tracking-tight">₹ {selectedBill.totalAmount}</p>
-                  </div>
-                  <div className="flex justify-between items-center pt-1">
-                    <p className="text-sm font-semibold text-gray-600">Amount After Discount</p>
-                    <p className="text-xl font-bold text-gray-800">₹ {selectedBill.amountAfterDiscount}</p>
-                  </div>
-                  <div className="flex justify-between items-center text-sm">
-                    <p className="text-gray-500">You saved</p>
-                    <p className="font-bold text-green-600">₹ {(() => {
-                      const total = Number(selectedBill?.totalAmount) || 0;
-                      const after = Number(selectedBill?.amountAfterDiscount) || 0;
-                      return (total - after).toFixed(2);
-                    })()}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+          {generatedBillHtml && (
+            <iframe
+              id="bill-iframe"
+              srcDoc={generatedBillHtml}
+              className="w-full h-full border-0"
+              title="Generated Bill Preview"
+            ></iframe>
           )}
         </DialogContent>
       </Dialog>
@@ -510,6 +403,37 @@ export default function Sale() {
                 <div>
                   <Label className="text-xs text-gray-500">Bill Date</Label>
                   <p className="font-medium">{formatDate(billToReturn.date)}</p>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Select Items to Return</Label>
+                <div className="border rounded-md overflow-hidden max-h-48 overflow-y-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-700 font-medium sticky top-0">
+                      <tr>
+                        <th className="p-2 w-10 text-center">#</th>
+                        <th className="p-2">Item</th>
+                        <th className="p-2 text-center">Qty</th>
+                        <th className="p-2 text-right">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {returnItems.map((item, index) => (
+                        <tr key={index} className={item.selected ? "bg-blue-50" : "hover:bg-gray-50"}>
+                          <td className="p-2 text-center">
+                            <Checkbox
+                              checked={item.selected}
+                              onCheckedChange={(checked) => handleItemSelect(index, checked as boolean)}
+                            />
+                          </td>
+                          <td className="p-2">{item.itemName || item.productName}</td>
+                          <td className="p-2 text-center">{item.qty}</td>
+                          <td className="p-2 text-right">₹{item.total || item.netAmount || 0}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -685,7 +609,7 @@ export default function Sale() {
                                   size="icon"
                                   variant="ghost"
                                   className="w-8 h-8 rounded-full border border-gray-300 hover:bg-blue-50"
-                                  onClick={() => setSelectedBill(bill)}
+                                  onClick={() => handleViewBill(bill)}
                                 >
                                   <Eye className="h-4 w-4 text-blue-600" />
                                 </Button>
