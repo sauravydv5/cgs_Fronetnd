@@ -29,7 +29,7 @@ import {
   BadgeIndianRupee,
   Percent,
   Eye,
-  RotateCcw,
+  Undo2,
 } from "lucide-react";
 import { Toaster, toast } from "sonner";
 import {
@@ -289,7 +289,8 @@ export default function Sale() {
     // Initialize items with selected: false
     const items = (bill.items || []).map((item: any) => ({
       ...item,
-      selected: false
+      selected: false,
+      returnQty: item.qty // Default to full quantity
     }));
     setReturnItems(items);
     setRefundAmount("0");
@@ -297,26 +298,65 @@ export default function Sale() {
     setReturnModalOpen(true);
   };
 
+  const calculateRefundAmount = (items: any[]) => {
+    const total = items.reduce((acc, item) => {
+      if (!item.selected) return acc;
+      const originalTotal = Number(item.total) || Number(item.netAmount) || 0;
+      const originalQty = Number(item.qty) || 1;
+      const unitPrice = originalTotal / originalQty;
+      const qty = item.returnQty === "" ? 0 : Number(item.returnQty);
+      const itemRefund = unitPrice * qty;
+      return acc + itemRefund;
+    }, 0);
+    setRefundAmount(total.toFixed(2));
+  };
+
   const handleItemSelect = (index: number, checked: boolean) => {
     setReturnItems((prev) => {
       const newItems = [...prev];
       newItems[index] = { ...newItems[index], selected: checked };
+      calculateRefundAmount(newItems);
+      return newItems;
+    });
+  };
+
+  const handleReturnQtyChange = (index: number, value: string) => {
+    setReturnItems((prev) => {
+      const newItems = [...prev];
+      const item = newItems[index];
+
+      if (value === "") {
+        newItems[index] = { ...item, returnQty: "" };
+        calculateRefundAmount(newItems);
+        return newItems;
+      }
+
+      let val = parseInt(value);
+      if (isNaN(val)) val = 0;
       
-      const total = newItems.reduce((acc, item) => {
-        return item.selected ? acc + (Number(item.total) || Number(item.netAmount) || 0) : acc;
-      }, 0);
-      setRefundAmount(total.toFixed(2));
-      
+      // Clamp between 0 and max qty (purchased qty)
+      const maxQty = Number(item.qty);
+      if (val > maxQty) val = maxQty;
+      if (val < 0) val = 0;
+
+      newItems[index] = { ...item, returnQty: val };
+      calculateRefundAmount(newItems);
       return newItems;
     });
   };
 
   const handleSubmitReturn = async () => {
     if (!billToReturn) return;
-    const selectedItems = returnItems.filter((i) => i.selected);
+    const selectedItems = returnItems
+      .filter((i) => i.selected && i.returnQty !== "" && Number(i.returnQty) > 0)
+      .map((i) => ({
+        ...i,
+        qty: Number(i.returnQty), // Send the return quantity
+        total: ((Number(i.total) || Number(i.netAmount) || 0) / (Number(i.qty) || 1)) * Number(i.returnQty)
+      }));
 
     if (selectedItems.length === 0) {
-      toast.error("Please select items to return");
+      toast.error("Please select items to return with valid quantity");
       return;
     }
 
@@ -414,12 +454,18 @@ export default function Sale() {
                       <tr>
                         <th className="p-2 w-10 text-center">#</th>
                         <th className="p-2">Item</th>
-                        <th className="p-2 text-center">Qty</th>
-                        <th className="p-2 text-right">Total</th>
+                        <th className="p-2 text-center">Return Qty</th>
+                        <th className="p-2 text-right">Refund Amt</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
-                      {returnItems.map((item, index) => (
+                      {returnItems.map((item, index) => {
+                         const originalTotal = Number(item.total) || Number(item.netAmount) || 0;
+                         const originalQty = Number(item.qty) || 1;
+                         const unitPrice = originalTotal / originalQty;
+                         const currentRefund = unitPrice * (item.returnQty === "" ? 0 : Number(item.returnQty));
+
+                         return (
                         <tr key={index} className={item.selected ? "bg-blue-50" : "hover:bg-gray-50"}>
                           <td className="p-2 text-center">
                             <Checkbox
@@ -427,11 +473,25 @@ export default function Sale() {
                               onCheckedChange={(checked) => handleItemSelect(index, checked as boolean)}
                             />
                           </td>
-                          <td className="p-2">{item.itemName || item.productName}</td>
-                          <td className="p-2 text-center">{item.qty}</td>
-                          <td className="p-2 text-right">₹{item.total || item.netAmount || 0}</td>
+                          <td className="p-2">
+                            <div className="font-medium">{item.itemName || item.productName}</div>
+                            <div className="text-xs text-gray-500">Purchased: {item.qty}</div>
+                          </td>
+                          <td className="p-2 text-center">
+                            <Input
+                                type="number"
+                                className="w-20 h-8 text-center mx-auto bg-white"
+                                value={item.returnQty}
+                                min={0}
+                                max={item.qty}
+                                onChange={(e) => handleReturnQtyChange(index, e.target.value)}
+                                onFocus={(e) => e.target.select()}
+                                disabled={!item.selected}
+                            />
+                          </td>
+                          <td className="p-2 text-right">₹{currentRefund.toFixed(2)}</td>
                         </tr>
-                      ))}
+                      )})}
                     </tbody>
                   </table>
                 </div>
@@ -629,7 +689,7 @@ export default function Sale() {
                                   className="w-8 h-8 rounded-full border border-gray-300 hover:bg-orange-50"
                                   onClick={() => handleReturnClick(bill)}
                                 >
-                                  <RotateCcw className="h-4 w-4 text-orange-600" />
+                                  <Undo2 className="h-4 w-4 text-orange-600" />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>

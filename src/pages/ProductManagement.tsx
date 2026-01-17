@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AdminLayout } from "@/components/AdminLayout";
-// import BarcodeScanner from "react-qr-barcode-scanner";
+import BarcodeScanner from "react-qr-barcode-scanner";
 import { parse } from "papaparse";
 import Barcode from "react-barcode";
-import adminInstance from "@/adminApi/adminInstance";
 import {
   addProduct,
   deleteProduct,
   getAllProducts,
   updateProduct,
+  getLowStockProducts,
 } from "@/adminApi/productApi";
 import { toast } from "sonner";
 import {
@@ -127,7 +127,9 @@ export default function ProductManagement() {
   const [barcodeDialogOpen, setBarcodeDialogOpen] = useState(false);
   const [barcodeProduct, setBarcodeProduct] = useState<any>(null);
   const [bulkUploadDialogOpen, setBulkUploadDialogOpen] = useState(false);
+  const [scanBarcodeDialogOpen, setScanBarcodeDialogOpen] = useState(false);
   // const [scanBarcodeDialogOpen, setScanBarcodeDialogOpen] = useState(false);
+  const [lowStockThreshold, setLowStockThreshold] = useState(10);
   const barcodeRef = useRef<HTMLDivElement>(null);
 
   const [formData, setFormData] = useState({
@@ -313,11 +315,23 @@ export default function ProductManagement() {
     }
   }, []);
 
+  const fetchLowStockSettings = useCallback(async () => {
+    try {
+      const res = await getLowStockProducts();
+      if (res?.data?.status && res?.data?.data?.settings) {
+        setLowStockThreshold(res.data.data.settings.threshold ?? 10);
+      }
+    } catch (err) {
+      console.error("Failed to fetch low stock settings:", err);
+    }
+  }, []);
+
   useEffect(() => {
     fetchProducts();
     fetchCategories();
     fetchSubCategories();
-  }, [fetchProducts, fetchCategories, fetchSubCategories]);
+    fetchLowStockSettings();
+  }, [fetchProducts, fetchCategories, fetchSubCategories, fetchLowStockSettings]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -481,6 +495,15 @@ export default function ProductManagement() {
       toast.warning("Please enter a category name.");
       return;
     }
+
+    const isDuplicate = categories.some(
+      (cat) => cat.name.toLowerCase() === newCategoryName.trim().toLowerCase()
+    );
+    if (isDuplicate) {
+      toast.error("Category already exists.");
+      return;
+    }
+
     try {
       await addCategory({
         name: newCategoryName,
@@ -503,6 +526,17 @@ export default function ProductManagement() {
       toast.warning("Please enter a sub-category name.");
       return;
     }
+
+    const isDuplicate = subCategories.some((sub) => {
+      const p = sub.parent || sub.category;
+      const pId = typeof p === "object" ? p._id : p;
+      return pId === parentCategoryId && sub.name.toLowerCase() === newSubCategoryName.trim().toLowerCase();
+    });
+    if (isDuplicate) {
+      toast.error("Sub-category already exists.");
+      return;
+    }
+
     try {
       // Call addSubCategory API
       await addSubCategory({
@@ -796,30 +830,23 @@ export default function ProductManagement() {
     });
   };
 
-  const handleBarcodeScan = (err: any, result: any) => {
+  const handleBarcodeScan = (err, result) => {
     if (result) {
       const scannedCode = result.text;
+      setScanBarcodeDialogOpen(false); // Close scanner immediately
       const foundProduct = products.find((p) => p.itemCode === scannedCode);
       if (foundProduct) {
-        handleViewDetails(foundProduct);
-        // setScanBarcodeDialogOpen(false);
+        toast.success(`Product "${foundProduct.productName}" found. Opening edit form.`);
+        handleEdit(foundProduct);
       } else {
-        toast.error(`Product with barcode "${scannedCode}" not found.`);
+        toast.info(`Product with code "${scannedCode}" not found. Opening add form.`);
+        resetForm();
+        setFormData((prev) => ({ ...prev, itemCode: scannedCode }));
+        setShowForm(true);
       }
     }
+    // Errors can be ignored as the scanner will keep trying.
   };
-  // const handleBarcodeScan = (err: any, result: any) => {
-  //   if (result) {
-  //     const scannedCode = result.text;
-  //     const foundProduct = products.find(p => p.itemCode === scannedCode);
-  //     if (foundProduct) {
-  //       handleViewDetails(foundProduct);
-  //       setScanBarcodeDialogOpen(false);
-  //     } else {
-  //       toast.error(`Product with barcode "${scannedCode}" not found.`);
-  //     }
-  //   }
-  // };
 
   const getSubCategories = () => {
     return [];
@@ -861,7 +888,7 @@ export default function ProductManagement() {
              const sub = subCategories.find(s => s._id === sId);
              if (sub) {
                  const p = sub.parent || sub.category;
-                 const pId = typeof p === 'object' ? p._id : p;
+                 const pId = (p && typeof p === 'object') ? p._id : p;
                  const parent = categories.find(c => c._id === pId);
                  if (parent) return <td key={columnId} className="px-6 py-4">{parent.name}</td>;
              }
@@ -873,7 +900,7 @@ export default function ProductManagement() {
              const subAsCat = subCategories.find(s => s._id === pId);
              if (subAsCat) {
                  const p = subAsCat.parent || subAsCat.category;
-                 const pIdReal = typeof p === 'object' ? p._id : p;
+                 const pIdReal = (p && typeof p === 'object') ? p._id : p;
                  const parent = categories.find(c => c._id === pIdReal);
                  if (parent) return <td key={columnId} className="px-6 py-4">{parent.name}</td>;
              }
@@ -939,7 +966,7 @@ export default function ProductManagement() {
           </td>
         );
       case "stock":
-        const isLowStock = (product.stock ?? 0) <= 10;
+        const isLowStock = (product.stock ?? 0) <= lowStockThreshold;
         return (
           <td key={columnId} className="px-6 py-4">
             <span
@@ -1040,14 +1067,14 @@ export default function ProductManagement() {
             <Plus className="w-4 h-4 mr-2" />
             Add Product
           </Button>
-          {/* <Button
+          <Button
             variant="secondary"
             className="rounded-full"
             onClick={() => setScanBarcodeDialogOpen(true)}
           >
             <BarcodeIcon className="w-4 h-4 mr-2" />
             Scan Barcode
-          </Button> */}
+          </Button>
           <Button
             variant="secondary"
             className="rounded-full"
@@ -1357,11 +1384,6 @@ export default function ProductManagement() {
                               </SelectTrigger>
                               <SelectContent className="category-select-content max-h-[360px] overflow-y-auto">
                                 {subCategories
-                                  .filter(sub => {
-                                    const parentRef = sub.parent || sub.category;
-                                    const pId = typeof parentRef === 'object' ? parentRef?._id : parentRef;
-                                    return pId === formData.category;
-                                  })
                                   .map((sub) => (
                                     <SelectItem key={sub._id} value={sub._id}>
                                       {sub.name}
@@ -1726,26 +1748,25 @@ export default function ProductManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Scan Barcode Dialog */}
-      {/* Scan Barcode Dialog
       <Dialog open={scanBarcodeDialogOpen} onOpenChange={setScanBarcodeDialogOpen}>
         <DialogContent className="sm:max-w-[600px]">
           <DialogHeader>
             <DialogTitle>Scan Product Barcode</DialogTitle>
             <DialogDescription>
-              Point your camera at a product's barcode to view its details.
+              Point your camera at a product's barcode.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            <BarcodeScanner
-              onUpdate={handleBarcodeScan}
-              width={500}
-              height={500}
-            />
+            {scanBarcodeDialogOpen && (
+              <BarcodeScanner
+                onUpdate={handleBarcodeScan}
+                width="100%"
+                height="100%"
+              />
+            )}
           </div>
         </DialogContent>
       </Dialog>
-      </Dialog> */}
 
       {/* Bulk Upload Dialog */}
 

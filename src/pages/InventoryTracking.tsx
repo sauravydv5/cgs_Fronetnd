@@ -197,7 +197,7 @@ export default function InventoryTracking() {
   });
 
   // Filter low stock products to only show those with stock <= 10
-  const displayableLowStockProducts = lowStockProducts.filter((p: any) => (p.stock ?? 0) <= 10);
+  const displayableLowStockProducts = lowStockProducts.filter((p: any) => (p.stock ?? 0) <= lowStockThreshold);
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -280,6 +280,7 @@ export default function InventoryTracking() {
         await deleteProduct({ id });
         toast.success("Product deleted successfully!");
         await fetchProducts();
+        fetchLowStock();
       } catch (err) {
         console.error("Delete error:", err);
         toast.error("Failed to delete product.");
@@ -366,6 +367,7 @@ export default function InventoryTracking() {
       setShowForm(false);
       resetForm();
       await fetchProducts();
+      fetchLowStock();
     } catch (err) {
       console.error("Submit Error:", err);
       toast.error(err.response?.data?.message || "Failed to save product.");
@@ -425,8 +427,8 @@ export default function InventoryTracking() {
   };
 
   const getStockColor = (stock) => {
-    if (stock <= 10) return "text-red-600";
-    if (stock > 10 && stock <= 50) return "text-yellow-600";
+    if (stock <= lowStockThreshold) return "text-red-600";
+    if (stock > lowStockThreshold && stock <= 50) return "text-yellow-600";
     return "text-green-600";
   };
 
@@ -443,7 +445,7 @@ export default function InventoryTracking() {
          const sub = subCategories.find(s => s._id === sId);
          if (sub) {
              const p = sub.parent || sub.category;
-             const pId = typeof p === 'object' ? p._id : p;
+             const pId = (p && typeof p === 'object') ? p._id : p;
              const parent = categories.find(c => c._id === pId);
              if (parent) return parent.name;
          }
@@ -454,7 +456,7 @@ export default function InventoryTracking() {
          const subAsCat = subCategories.find(s => s._id === pId);
          if (subAsCat) {
              const p = subAsCat.parent || subAsCat.category;
-             const pIdReal = typeof p === 'object' ? p._id : p;
+             const pIdReal = (p && typeof p === 'object') ? p._id : p;
              const parent = categories.find(c => c._id === pIdReal);
              if (parent) return parent.name;
          }
@@ -555,7 +557,7 @@ export default function InventoryTracking() {
                           <td className="px-4 py-3">
                             <span className={`font-semibold ${getStockColor(product.stock)}`}>
                               {product.stock > 0
-                                ? product.stock <= 10
+                                ? product.stock <= lowStockThreshold
                                   ? `Low Stock (${product.stock})`
                                   : product.stock
                                 : "Out of stock"}
@@ -675,7 +677,7 @@ export default function InventoryTracking() {
                         <span className="text-gray-500">Stock: </span>
                         <span className={getStockColor(product.stock)}>
                           {product.stock > 0
-                            ? product.stock <= 10
+                            ? product.stock <= lowStockThreshold
                               ? `Low Stock (${product.stock})`
                               : product.stock
                             : "Out of stock"}
@@ -975,11 +977,6 @@ export default function InventoryTracking() {
                           <SelectTrigger><SelectValue placeholder="Select a sub-category" /></SelectTrigger>
                           <SelectContent>
                             {subCategories
-                              .filter((sub: any) => {
-                                const parentRef = sub.parent || sub.category;
-                                const pId = typeof parentRef === 'object' ? parentRef?._id : parentRef;
-                                return pId === formData.category;
-                              })
                               .map((sub: any) => (
                                 <SelectItem key={sub._id} value={sub._id}>{sub.name}</SelectItem>
                               ))}

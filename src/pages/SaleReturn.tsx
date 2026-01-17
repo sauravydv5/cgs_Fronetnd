@@ -52,6 +52,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { getAllSaleReturns, deleteSaleReturn, updateReturnStatus } from "@/adminApi/saleReturnApi";
+import { generateBill } from "@/adminApi/billApi";
 import {
   Select,
   SelectContent,
@@ -111,7 +112,8 @@ export default function SaleReturn() {
   const [returns, setReturns] = useState<any[]>([]);
   const [allReturns, setAllReturns] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedReturn, setSelectedReturn] = useState<any | null>(null);
+  const [generatedBillHtml, setGeneratedBillHtml] = useState<string | null>(null);
+  const [showGeneratedBill, setShowGeneratedBill] = useState(false);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
@@ -196,6 +198,34 @@ export default function SaleReturn() {
     }
   };
 
+  const handleViewBill = async (ret: any) => {
+    try {
+      const customerId = ret.customerId?._id || ret.customerId;
+      if (!customerId) {
+        toast.error("Customer ID not found for this return.");
+        return;
+      }
+      const response = await generateBill(customerId);
+      const billDataUrl = response.url;
+      if (response.success && billDataUrl) {
+        const base64Part = billDataUrl.split(",")[1];
+        const binaryString = window.atob(base64Part);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const decodedHtml = new TextDecoder().decode(bytes);
+        setGeneratedBillHtml(decodedHtml);
+        setShowGeneratedBill(true);
+      } else {
+        toast.error(response.message || "Failed to generate bill.");
+      }
+    } catch (error: any) {
+      console.error("Error generating bill:", error);
+      toast.error("Failed to generate bill.");
+    }
+  };
+
   const handleDeleteReturn = async (returnId: string) => {
     if (!window.confirm("Are you sure you want to delete this return record?")) {
       return;
@@ -246,124 +276,30 @@ export default function SaleReturn() {
     <AdminLayout title="Bill Generation > Sale Return">
       <Toaster position="top-center" />
 
-      {/* Return Details Modal */}
-      <Dialog open={!!selectedReturn} onOpenChange={() => setSelectedReturn(null)}>
-        <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto bg-white p-0 shadow-2xl">
-          <DialogHeader className="bg-gradient-to-br from-[#f97a63] via-[#f86a53] to-[#f75943] text-white p-5 rounded-t-lg relative overflow-hidden flex flex-col items-start">
-             <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-16 -mt-16"></div>
-            <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
-            <div className="relative z-10">
-              <DialogTitle className="text-2xl font-extrabold tracking-tight mb-1">
-                Return Details
-              </DialogTitle>
-              <span className="bg-white text-[#f97a63] text-sm font-bold px-7 py-1.5 rounded-full shadow-lg">
-                  #{selectedReturn?.returnId}
-                </span>
-            </div>
+      {/* Generated Bill Modal */}
+      <Dialog open={showGeneratedBill} onOpenChange={setShowGeneratedBill}>
+        <DialogContent className="max-w-screen-lg w-[90vw] h-[90vh] flex flex-col p-2">
+          <DialogHeader className="p-4 flex-row flex justify-between items-center">
+            <DialogTitle>Generated Bill</DialogTitle>
+            <Button
+              onClick={() => {
+                const iframe = document.getElementById(
+                  "bill-iframe"
+                ) as HTMLIFrameElement;
+                iframe?.contentWindow?.print();
+              }}
+              className="bg-[#E98C81] hover:bg-[#d97a71] text-white"
+            >
+              Save & Print
+            </Button>
           </DialogHeader>
-          {selectedReturn && (
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
-                {/* Customer Card */}
-                <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 rounded-lg p-3 border border-purple-200/50 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="bg-purple-500 rounded-lg p-2">
-                      <User className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-purple-600 uppercase tracking-wide">Customer Name</p>
-                      <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedReturn.customerName}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Date Card */}
-                <div className="bg-gradient-to-br from-orange-50 to-orange-100/50 rounded-lg p-3 border border-orange-200/50 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="bg-orange-500 rounded-lg p-2">
-                      <CalendarDays className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-orange-600 uppercase tracking-wide">Return Date</p>
-                      <p className="text-sm font-bold text-gray-800 mt-0.5">
-                        {formatDate(selectedReturn.date)}
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                
-                 {/* Bill Ref Card */}
-                 <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 rounded-lg p-3 border border-blue-200/50 shadow-sm hover:shadow-md transition-all">
-                  <div className="flex items-center space-x-2.5">
-                    <div className="bg-blue-500 rounded-lg p-2">
-                      <Hash className="h-4 w-4 text-white" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs font-semibold text-blue-600 uppercase tracking-wide">Original Bill</p>
-                      <p className="text-sm font-bold text-gray-800 mt-0.5">{selectedReturn.billId}</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Return Items Section */}
-              <div className="bg-white rounded-lg border border-gray-200 mb-5 overflow-hidden">
-                <div className="bg-gray-50 px-4 py-2 border-b border-gray-200">
-                  <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wide flex items-center">
-                    <Hash className="h-3.5 w-3.5 mr-1.5 text-gray-600" />
-                    Return Items
-                  </h3>
-                </div>
-                <div className="max-h-60 overflow-y-auto">
-                  <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-gray-500 font-medium text-xs uppercase sticky top-0">
-                      <tr>
-                        <th className="px-4 py-2">Item Name</th>
-                        <th className="px-4 py-2 text-center">Qty</th>
-                        <th className="px-4 py-2 text-right">Rate</th>
-                        <th className="px-4 py-2 text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                      {selectedReturn.items && selectedReturn.items.length > 0 ? (
-                        selectedReturn.items.map((item: any, index: number) => (
-                          <tr key={index} className="hover:bg-gray-50/50">
-                            <td className="px-4 py-2">
-                              <p className="font-medium text-gray-800">{item.itemName || item.productName || item.productId?.productName || "N/A"}</p>
-                              <p className="text-xs text-gray-500">{item.itemCode || item.productId?.itemCode || ""}</p>
-                            </td>
-                            <td className="px-4 py-2 text-center">{item.qty}</td>
-                            <td className="px-4 py-2 text-right">₹{item.rate || item.mrp || 0}</td>
-                            <td className="px-4 py-2 text-right font-medium">₹{item.total || item.netAmount || item.amount || 0}</td>
-                          </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan={4} className="px-4 py-4 text-center text-gray-500">No items found</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Amount Summary Section */}
-              <div className="bg-gradient-to-br from-[#fff4f1] via-orange-50 to-orange-100 rounded-xl p-4 border-2 border-orange-200 shadow-lg">
-                <div className="space-y-2.5">
-                  <div className="flex justify-between items-center pb-2.5 border-b-2 border-orange-300">
-                    <div className="flex items-center space-x-2">
-                      <BadgeIndianRupee className="h-5 w-5 text-[#f97a63]" />
-                      <p className="text-sm font-bold text-gray-700 uppercase tracking-wide">Refund Amount</p>
-                    </div>
-                    <p className="text-2xl font-extrabold text-[#f97a63] tracking-tight">₹ {selectedReturn.totalAmount}</p>
-                  </div>
-                   <div className="flex justify-between items-center pt-1">
-                    <p className="text-sm font-semibold text-gray-600">Reason</p>
-                    <p className="text-sm font-bold text-gray-800">{selectedReturn.reason}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+          {generatedBillHtml && (
+            <iframe
+              id="bill-iframe"
+              srcDoc={generatedBillHtml}
+              className="w-full h-full border-0"
+              title="Generated Bill Preview"
+            ></iframe>
           )}
         </DialogContent>
       </Dialog>
@@ -515,7 +451,7 @@ export default function SaleReturn() {
                                   size="icon"
                                   variant="ghost"
                                   className="w-8 h-8 rounded-full border border-gray-300 hover:bg-blue-50"
-                                  onClick={() => setSelectedReturn(ret)}
+                                  onClick={() => handleViewBill(ret)}
                                 >
                                   <Eye className="h-4 w-4 text-blue-600" />
                                 </Button>
