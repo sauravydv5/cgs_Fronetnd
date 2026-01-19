@@ -1756,10 +1756,12 @@ export default function ProductManagement() {
               Point your camera at a product's barcode.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4">
+          <div className="py-4 h-[300px] sm:h-[400px] w-full bg-gray-100 rounded-md overflow-hidden relative flex items-center justify-center">
+            <p className="text-gray-500 text-sm absolute">Camera loading... Ensure permission is granted.</p>
             {scanBarcodeDialogOpen && (
               <BarcodeScanner
                 onUpdate={handleBarcodeScan}
+                onError={(err) => toast.error("Camera access error: " + err)}
                 width="100%"
                 height="100%"
               />

@@ -69,7 +69,7 @@ import {
 } from "@/components/ui/select";
 import { format } from "date-fns";
 import { updateBillPaymentStatus, generateBill } from "@/adminApi/billApi";
-import { addSaleReturn } from "@/adminApi/saleReturnApi";
+import { addSaleReturn, getAllSaleReturns } from "@/adminApi/saleReturnApi";
 
 const DraggableHeader = ({
   column,
@@ -135,6 +135,7 @@ export default function Sale() {
   const [returnReason, setReturnReason] = useState("");
   const [refundAmount, setRefundAmount] = useState("");
   const [returnItems, setReturnItems] = useState<any[]>([]);
+  const [returnedBillIds, setReturnedBillIds] = useState<Set<string>>(new Set());
 
   const location = useLocation();
 
@@ -175,13 +176,39 @@ export default function Sale() {
     }
   };
 
+  const fetchReturns = async () => {
+    try {
+      const data = await getAllSaleReturns();
+      let rawReturns = [];
+      if (data && Array.isArray(data.data)) {
+        rawReturns = data.data;
+      } else if (data && Array.isArray(data.saleReturns)) {
+        rawReturns = data.saleReturns;
+      } else if (Array.isArray(data)) {
+        rawReturns = data;
+      }
+
+      const ids = new Set(rawReturns.map((r: any) => {
+        if (r.billId && typeof r.billId === 'object') {
+          return r.billId._id;
+        }
+        return r.billId;
+      }).filter(Boolean));
+      setReturnedBillIds(ids);
+    } catch (error) {
+      console.error("Failed to fetch returns:", error);
+    }
+  };
+
   useEffect(() => {
     fetchBills();
+    fetchReturns();
   }, []); // Initial fetch
 
   useEffect(() => {
     if (location.state?.refresh) {
       fetchBills();
+      fetchReturns();
     }
   }, [location.state]);
 
@@ -370,9 +397,10 @@ export default function Sale() {
       toast.success("Return processed successfully");
       setReturnModalOpen(false);
       setBillToReturn(null);
-    } catch (error) {
+      fetchReturns();
+    } catch (error: any) {
       console.error("Failed to process return:", error);
-      toast.error("Failed to process return.");
+      toast.error(error.response?.data?.message || "Failed to process return.");
     }
   };
 
@@ -659,8 +687,10 @@ export default function Sale() {
                           }`}
                         >
                           {bill.paymentStatus}
-                        </span>
-                      ) : */ column.id === "action" ? (
+                        </span> 
+                      ) : */ column.id === "action" ? (() => {
+                        const isReturned = returnedBillIds.has(bill._id);
+                        return (
                         <div className="flex items-center justify-center gap-2">
                           <TooltipProvider>
                             <Tooltip>
@@ -688,12 +718,13 @@ export default function Sale() {
                                   variant="ghost"
                                   className="w-8 h-8 rounded-full border border-gray-300 hover:bg-orange-50"
                                   onClick={() => handleReturnClick(bill)}
+                                  disabled={isReturned}
                                 >
-                                  <Undo2 className="h-4 w-4 text-orange-600" />
+                                  <Undo2 className={`h-4 w-4 ${isReturned ? "text-gray-400" : "text-orange-600"}`} />
                                 </Button>
                               </TooltipTrigger>
                               <TooltipContent>
-                                <p>Return</p>
+                                <p>{isReturned ? "Return Already Exists" : "Return"}</p>
                               </TooltipContent>
                             </Tooltip>
                           </TooltipProvider>
@@ -716,7 +747,8 @@ export default function Sale() {
                             </Tooltip>
                           </TooltipProvider>
                         </div>
-                      ) : column.id === 'date' ? (
+                      );
+                      })() : column.id === 'date' ? (
                         formatDate(bill.date) 
                       ) : column.id === 'discount' ? (
                         `${bill.discount || 0}%`

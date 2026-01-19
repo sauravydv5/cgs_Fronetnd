@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Calendar } from "lucide-react";
 import {
   Dialog,
-  DialogContent,
+  DialogContent,  
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -31,6 +31,7 @@ import {
   ResponsiveContainer,
   Cell,
 } from "recharts";
+import { format } from "date-fns";
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -49,6 +50,7 @@ export default function Dashboard() {
   const [productPerformance, setProductPerformance] = useState<any[]>([]);
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [graphDateRange, setGraphDateRange] = useState("");
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -101,20 +103,89 @@ export default function Dashboard() {
       ]);
 
       /* ---------- Sales Chart ---------- */
-      const monthNames = [
-        "Jan","Feb","Mar","Apr","May","Jun",
-        "Jul","Aug","Sep","Oct","Nov","Dec",
-      ];
+      let mappedSales = [];
+      const salesChartData = Array.isArray(charts?.salesChart) ? charts.salesChart : [];
 
-      const mappedSales = monthNames.map((month, index) => {
-        const found = charts.salesChart.find(
-          (item: any) => item.month === index + 1
-        );
-        return {
-          month,
-          total: found ? found.total : 0,
-        };
-      });
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+        setGraphDateRange(`${format(start, "dd MMM yyyy")} - ${format(end, "dd MMM yyyy")}`);
+
+        const diffTime = Math.abs(end.getTime() - start.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays > 60) {
+          const months = [];
+          const s = new Date(start);
+          s.setDate(1);
+          const e = new Date(end);
+          e.setDate(1);
+
+          while (s <= e) {
+            months.push(new Date(s));
+            s.setMonth(s.getMonth() + 1);
+          }
+
+          mappedSales = months.map((m) => {
+            const mStr = format(m, "yyyy-MM");
+            const total = salesChartData.reduce((acc: number, item: any) => {
+              const itemDate = item.date || item._id;
+              if (itemDate && (typeof itemDate === "string" || itemDate instanceof Date)) {
+                try {
+                  if (format(new Date(itemDate), "yyyy-MM") === mStr) {
+                    return acc + (Number(item.total) || 0);
+                  }
+                } catch {}
+              }
+              if (item.month && item.year) {
+                const itemMStr = `${item.year}-${String(item.month).padStart(2, "0")}`;
+                if (itemMStr === mStr) return acc + (Number(item.total) || 0);
+              }
+              return acc;
+            }, 0);
+            return { label: format(m, "MMM yyyy"), total };
+          });
+        } else {
+          const days = [];
+          for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+            days.push(new Date(d));
+          }
+
+          mappedSales = days.map((date) => {
+            const dateStr = format(date, "yyyy-MM-dd");
+            const total = salesChartData.reduce((acc: number, item: any) => {
+              const itemDate = item.date || item._id;
+              if (!itemDate) return acc;
+              let match = false;
+              if (String(itemDate).startsWith(dateStr)) match = true;
+              else {
+                try { if (format(new Date(itemDate), "yyyy-MM-dd") === dateStr) match = true; } catch {}
+              }
+              if (match) return acc + (Number(item.total) || 0);
+              return acc;
+            }, 0);
+            return { label: format(date, "dd MMM"), total };
+          });
+        }
+      } else {
+        const monthNames = [
+          "Jan","Feb","Mar","Apr","May","Jun",
+          "Jul","Aug","Sep","Oct","Nov","Dec",
+        ];
+        const currentYear = new Date().getFullYear().toString().slice(-2);
+        const currentFullYear = new Date().getFullYear();
+        setGraphDateRange(`Jan ${currentFullYear} - Dec ${currentFullYear}`);
+
+        mappedSales = monthNames.map((month, index) => {
+          const found = salesChartData.find(
+            (item: any) => item.month === index + 1 && item.year === currentFullYear
+          );
+          return {
+            label: `${month} ${currentYear}`,
+            total: found?.total || 0,
+          };
+        });
+      }
 
       setSalesData(mappedSales);
 
@@ -194,13 +265,18 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Sales</CardTitle>
+              <CardTitle>
+                Sales
+                {graphDateRange && (
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">({graphDateRange})</span>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer height={300}>
                 <LineChart data={salesData}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
+                  <XAxis dataKey="label" />
                   <YAxis />
                   <Tooltip />
                   <Line

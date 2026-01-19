@@ -2,8 +2,9 @@ import React, { useState, useEffect, useCallback } from "react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Calendar, Edit3, Trash2, Eye, Undo2 } from "lucide-react";
+import { Search, Calendar, Edit3, Trash2, Eye, Undo2, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -23,6 +24,20 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { cn } from "@/lib/utils";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 import {
   getAllPurchaseDetails,
@@ -32,6 +47,7 @@ import {
   getPurchaseByDateRange,
 } from "@/adminApi/purchaseDetailApi";
 import { getAllSuppliers } from "@/adminApi/supplierApi";
+import { getAllProducts } from "@/adminApi/productApi";
 import { addPurchaseReturn } from "@/adminApi/purchaseReturnApi";
 import { format } from "date-fns";
 import {
@@ -47,6 +63,11 @@ import { Label } from "@/components/ui/label";
 export default function PurchaseDetail() {
   const [purchases, setPurchases] = useState([]);
   const [suppliers, setSuppliers] = useState([]);
+  const [products, setProducts] = useState([]);
+  const [purchaseItems, setPurchaseItems] = useState([]);
+  const [returnItems, setReturnItems] = useState([]);
+  const [openProductPopover, setOpenProductPopover] = useState<number | null>(null);
+  const [refundAmount, setRefundAmount] = useState("0");
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingPurchase, setEditingPurchase] = useState(null);
@@ -87,6 +108,44 @@ export default function PurchaseDetail() {
     // Temporarily force initialColumns to debug column order issue
     return initialColumns; // savedOrder ? JSON.parse(savedOrder) : initialColumns;
   });
+
+  useEffect(() => {
+    const fetchProds = async () => {
+      try {
+               // @ts-ignore
+        const response = await getAllProducts({ limit: 10000 });
+        let productData = [];
+
+        if (response.data?.data?.rows && Array.isArray(response.data.data.rows)) {
+          productData = response.data.data.rows;
+        } else if (
+          response.data?.data?.products &&
+          Array.isArray(response.data.data.products)
+        ) {
+          productData = response.data.data.products;
+        } else if (response.data?.rows && Array.isArray(response.data.rows)) {
+          productData = response.data.rows;
+        } else if (
+          response.data?.products &&
+          Array.isArray(response.data.products)
+        ) {
+          productData = response.data.products;
+        } else if (response.data?.data && Array.isArray(response.data.data)) {
+          productData = response.data.data;
+        } else if (Array.isArray(response.data)) {
+          productData = response.data;
+        } else if (response.data?.result && Array.isArray(response.data.result)) {
+          productData = response.data.result;
+        } else if (response.data?.items && Array.isArray(response.data.items)) {
+          productData = response.data.items;
+        }
+        setProducts(productData);
+      } catch (error) {
+        console.error("Failed to fetch products", error);
+      }
+    };
+    fetchProds();
+  }, []);
 
   const fetchPurchases = useCallback(async () => {
     setLoading(true);
@@ -168,6 +227,45 @@ export default function PurchaseDetail() {
     }
   };
 
+  const handleAddItem = () => {
+    setPurchaseItems([...purchaseItems, { product: "", quantity: 1, rate: 0, amount: 0 }]);
+  };
+
+  const handleRemoveItem = (index) => {
+    const newItems = [...purchaseItems];
+    newItems.splice(index, 1);
+    setPurchaseItems(newItems);
+    calculateTotal(newItems);
+  };
+
+  const handleItemChange = (index, field, value) => {
+    const newItems = [...purchaseItems];
+    const item = { ...newItems[index] };
+    
+    if (field === "product") {
+        item.product = value;
+        const selectedProd = products.find(p => p._id === value);
+        if (selectedProd) {
+            item.rate = selectedProd.costPrice || 0;
+        }
+    } else {
+        item[field] = value;
+    }
+
+    const qty = Number(item.quantity) || 0;
+    const rate = Number(item.rate) || 0;
+    item.amount = qty * rate;
+
+    newItems[index] = item;
+    setPurchaseItems(newItems);
+    calculateTotal(newItems);
+  };
+
+  const calculateTotal = (items) => {
+    const total = items.reduce((acc, curr) => acc + (Number(curr.amount) || 0), 0);
+    setNewPurchase(prev => ({ ...prev, totalAmount: total.toString() }));
+  };
+
   const handleEditClick = (purchase) => {
     setEditingPurchase(purchase);
     setNewPurchase({
@@ -177,6 +275,16 @@ export default function PurchaseDetail() {
       paymentMethod: purchase.paymentMethod,
       status: purchase.status,
     });
+    if (purchase.items && Array.isArray(purchase.items)) {
+      setPurchaseItems(purchase.items.map(i => ({
+          product: i.product?._id || i.product,
+          quantity: i.qty || i.quantity || 0,
+          rate: i.rate || 0,
+          amount: (i.qty || i.quantity || 0) * (i.rate || 0)
+      })));
+    } else {
+      setPurchaseItems([]);
+    }
     setShowModal(true);
   };
 
@@ -188,23 +296,103 @@ export default function PurchaseDetail() {
   const handleReturnClick = (purchase) => {
     setSelectedPurchase(purchase);
     setReturnReason("");
+    
+    // Initialize items with selected: false
+    const items = (purchase.items || []).map((item: any) => ({
+      ...item,
+      selected: false,
+      returnQty: item.qty, // Default to full quantity
+      currentStock: item.product?.stock // Capture current stock
+    }));
+    setReturnItems(items);
+    setRefundAmount("0");
     setShowReturnModal(true);
+  };
+
+  const calculateRefundAmount = (items: any[]) => {
+    const total = items.reduce((acc, item) => {
+      if (!item.selected) return acc;
+      const rate = Number(item.rate) || 0;
+      const qty = item.returnQty === "" ? 0 : Number(item.returnQty);
+      return acc + (rate * qty);
+    }, 0);
+    setRefundAmount(total.toFixed(2));
+  };
+
+  const handleItemSelect = (index: number, checked: boolean) => {
+    setReturnItems((prev) => {
+      const newItems = [...prev];
+      newItems[index] = { ...newItems[index], selected: checked };
+      calculateRefundAmount(newItems);
+      return newItems;
+    });
+  };
+
+  const handleReturnQtyChange = (index: number, value: string) => {
+    setReturnItems((prev) => {
+      const newItems = [...prev];
+      const item = newItems[index];
+
+      if (value === "") {
+        newItems[index] = { ...item, returnQty: "" };
+        calculateRefundAmount(newItems);
+        return newItems;
+      }
+
+      let val = parseFloat(value);
+      if (isNaN(val)) val = 0;
+      
+      const maxQty = Number(item.qty);
+      if (val > maxQty) val = maxQty;
+      if (val < 0) val = 0;
+
+      newItems[index] = { ...item, returnQty: val };
+      calculateRefundAmount(newItems);
+      return newItems;
+    });
   };
 
   const handleConfirmReturn = async () => {
     if (!selectedPurchase) return;
+
+    const selectedItems = returnItems
+      .filter((i) => i.selected && i.returnQty !== "" && Number(i.returnQty) > 0)
+      .map((i) => ({
+        product: i.product?._id || i.product,
+        qty: Number(i.returnQty),
+        rate: Number(i.rate) || 0,
+        amount: (Number(i.rate) || 0) * Number(i.returnQty)
+      }));
+
+    if (selectedItems.length === 0) {
+      toast.error("Please select items to return with valid quantity");
+      return;
+    }
+
+    // Client-side validation for stock
+    const insufficientStockItems = returnItems.filter(i => 
+      i.selected && 
+      i.currentStock !== undefined && 
+      Number(i.returnQty) > Number(i.currentStock)
+    );
+
+    if (insufficientStockItems.length > 0) {
+      toast.error(`Cannot return more than current stock (${insufficientStockItems[0].currentStock}) for ${insufficientStockItems[0].product?.productName || 'item'}`);
+      return;
+    }
+
     setReturnLoading(true);
 
     try {
       const payload = {
         purchase: selectedPurchase._id,
         supplier: selectedPurchase.supplier?._id || selectedPurchase.supplier,
-        amount: selectedPurchase.totalAmount,
+        amount: Number(refundAmount),
         reason: returnReason,
         date: new Date().toISOString(),
-        qty: selectedPurchase.items?.reduce((acc: number, item: any) => acc + (Number(item.qty) || 0), 0) || 0,
+        qty: selectedItems.reduce((acc, item) => acc + item.qty, 0),
         status: "PENDING",
-        items: selectedPurchase.items || []
+        items: selectedItems
       };
 
       const response = await addPurchaseReturn(payload);
@@ -212,12 +400,18 @@ export default function PurchaseDetail() {
         toast.success("Purchase returned successfully!");
         setShowReturnModal(false);
         setSelectedPurchase(null);
+        fetchPurchases();
       } else {
         toast.error(response.message || "Failed to return purchase.");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Return error:", error);
-      toast.error("An error occurred while returning the purchase.");
+      const msg = error.response?.data?.message || error.message || "An error occurred while returning the purchase.";
+      if (msg.includes("less than minimum allowed value") || msg.includes("stock")) {
+         toast.error("Return failed: Insufficient stock available to process this return.");
+      } else {
+         toast.error(msg);
+      }
     } finally {
       setReturnLoading(false);
     }
@@ -231,6 +425,7 @@ export default function PurchaseDetail() {
       paymentMethod: "CASH",
       status: "PENDING",
     });
+    setPurchaseItems([]);
     setShowModal(false);
     setEditingPurchase(null);
     setFormLoading(false);
@@ -256,7 +451,12 @@ export default function PurchaseDetail() {
       const payload = {
         ...newPurchase,
         totalAmount: Number(newPurchase.totalAmount),
-        items: [],
+        items: purchaseItems.map(i => ({
+          product: i.product,
+          qty: Number(i.quantity),
+          rate: Number(i.rate),
+          amount: (Number(i.quantity) || 0) * (Number(i.rate) || 0)
+        })),
       };
 
       let response;
@@ -487,8 +687,8 @@ export default function PurchaseDetail() {
 
       {/* Add/Edit Purchase Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 overflow-y-auto py-10">
+          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl my-auto">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-semibold">{editingPurchase ? "Edit Purchase" : "Add New Purchase"}</h3>
               <button onClick={resetForm} className="text-gray-500 hover:text-gray-800">&times;</button>
@@ -511,9 +711,101 @@ export default function PurchaseDetail() {
                 <label className="text-sm font-medium">Date <span className="text-red-500">*</span></label>
                 <Input type="date" name="date" value={newPurchase.date} onChange={handleInputChange} />
               </div>
+
+              <div className="border-t pt-4">
+                <div className="flex justify-between items-center mb-2">
+                    <label className="text-sm font-medium">Items</label>
+                    <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>+ Add Item</Button>
+                </div>
+                
+                {purchaseItems.length > 0 && (
+                    <div className="border rounded-md overflow-hidden mb-4">
+                        <table className="w-full text-xs">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="p-2 text-left">Product</th>
+                                    <th className="p-2 w-20">Qty</th>
+                                    <th className="p-2 w-24">Rate</th>
+                                    <th className="p-2 w-24 text-right">Amount</th>
+                                    <th className="p-2 w-8"></th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {purchaseItems.map((item, index) => (
+                                    <tr key={index}>
+                                        <td className="p-2">
+                                            <Popover
+                                                open={openProductPopover === index}
+                                                onOpenChange={(isOpen) => setOpenProductPopover(isOpen ? index : null)}
+                                            >
+                                                <PopoverTrigger asChild>
+                                                    <Button
+                                                        variant="outline"
+                                                        role="combobox"
+                                                        className={cn(
+                                                            "w-full justify-between font-normal h-9 px-3",
+                                                            !item.product && "text-muted-foreground"
+                                                        )}
+                                                    >
+                                                        {item.product
+                                                            ? products.find((p) => p._id === item.product)?.productName
+                                                            : "Select Product"}
+                                                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                                                    </Button>
+                                                </PopoverTrigger>
+                                                <PopoverContent className="w-[300px] p-0" align="start">
+                                                    <Command>
+                                                        <CommandInput placeholder="Search product..." />
+                                                        <CommandList>
+                                                            <CommandEmpty>No product found.</CommandEmpty>
+                                                            <CommandGroup>
+                                                                {products.map((product) => (
+                                                                    <CommandItem
+                                                                        key={product._id}
+                                                                        value={product.productName}
+                                                                        onSelect={() => {
+                                                                            handleItemChange(index, "product", product._id);
+                                                                            setOpenProductPopover(null);
+                                                                        }}
+                                                                    >
+                                                                        <Check
+                                                                            className={cn(
+                                                                                "mr-2 h-4 w-4",
+                                                                                item.product === product._id
+                                                                                    ? "opacity-100"
+                                                                                    : "opacity-0"
+                                                                            )}
+                                                                        />
+                                                                        {product.productName}
+                                                                    </CommandItem>
+                                                                ))}
+                                                            </CommandGroup>
+                                                        </CommandList>
+                                                    </Command>
+                                                </PopoverContent>
+                                            </Popover>
+                                        </td>
+                                        <td className="p-2">
+                                            <input type="number" className="w-full border rounded p-1" value={item.quantity} onChange={(e) => handleItemChange(index, 'quantity', e.target.value)} />
+                                        </td>
+                                        <td className="p-2">
+                                            <input type="number" className="w-full border rounded p-1" value={item.rate} onChange={(e) => handleItemChange(index, 'rate', e.target.value)} />
+                                        </td>
+                                        <td className="p-2 text-right">{item.amount?.toLocaleString()}</td>
+                                        <td className="p-2 text-center">
+                                            <button onClick={() => handleRemoveItem(index)} className="text-red-500"><Trash2 size={14} /></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                )}
+              </div>
+
               <div>
                 <label className="text-sm font-medium">Total Amount <span className="text-red-500">*</span></label>
-                <Input type="number" name="totalAmount" placeholder="e.g., 15000" value={newPurchase.totalAmount} onChange={handleInputChange} />
+                <Input type="number" name="totalAmount" placeholder="e.g., 15000" value={newPurchase.totalAmount} onChange={handleInputChange} readOnly={purchaseItems.length > 0} className={purchaseItems.length > 0 ? "bg-gray-100" : ""} />
               </div>
               <div>
                 <label className="text-sm font-medium">Payment Method</label>
@@ -632,9 +924,73 @@ export default function PurchaseDetail() {
             </div>
             <div className="space-y-4">
               <p>Are you sure you want to process a return for this purchase?</p>
-              <p><strong>Purchase ID:</strong> {selectedPurchase.purchaseId}</p>
-              <p><strong>Supplier:</strong> {selectedPurchase.supplier?.name || selectedPurchase.supplierName}</p>
-              <p><strong>Amount:</strong> ₹{selectedPurchase.totalAmount?.toLocaleString('en-IN') || 0}</p>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <p><strong>Purchase ID:</strong> {selectedPurchase.purchaseId}</p>
+                <p><strong>Supplier:</strong> {selectedPurchase.supplier?.name || selectedPurchase.supplierName}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Select Items to Return</Label>
+                <div className="border rounded-md overflow-hidden max-h-48 overflow-y-auto">
+                  <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-700 font-medium sticky top-0">
+                      <tr>
+                        <th className="p-2 w-10 text-center">#</th>
+                        <th className="p-2">Item</th>
+                        <th className="p-2 text-center">Return Qty</th>
+                        <th className="p-2 text-right">Rate</th>
+                        <th className="p-2 text-right">Refund Amt</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {returnItems.map((item, index) => {
+                         const rate = Number(item.rate) || 0;
+                         const currentRefund = rate * (item.returnQty === "" ? 0 : Number(item.returnQty));
+                         const stock = item.currentStock !== undefined ? item.currentStock : 'N/A';
+
+                         return (
+                        <tr key={index} className={item.selected ? "bg-blue-50" : "hover:bg-gray-50"}>
+                          <td className="p-2 text-center">
+                            <Checkbox
+                              checked={item.selected}
+                              onCheckedChange={(checked) => handleItemSelect(index, checked as boolean)}
+                            />
+                          </td>
+                          <td className="p-2">
+                            <div className="font-medium">{item.product?.productName || item.productName || 'N/A'}</div>
+                            <div className="text-xs text-gray-500">
+                                Purchased: {item.qty}
+                                {stock !== 'N/A' && <span className={Number(item.returnQty) > Number(stock) ? "text-red-500 font-bold ml-2" : "text-gray-500 ml-2"}>
+                                    (In Stock: {stock})
+                                </span>}
+                            </div>
+                          </td>
+                          <td className="p-2 text-center">
+                            <Input
+                                type="number"
+                                className="w-20 h-8 text-center mx-auto bg-white"
+                                value={item.returnQty}
+                                min={0}
+                                max={item.qty}
+                                onChange={(e) => handleReturnQtyChange(index, e.target.value)}
+                                onFocus={(e) => e.target.select()}
+                                disabled={!item.selected}
+                            />
+                          </td>
+                          <td className="p-2 text-right">₹{rate.toLocaleString('en-IN')}</td>
+                          <td className="p-2 text-right">₹{currentRefund.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                        </tr>
+                      )})}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center border-t pt-2">
+                <p className="font-medium">Total Refund Amount:</p>
+                <p className="font-bold text-lg text-orange-600">₹{Number(refundAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</p>
+              </div>
+
               <div>
                 <label className="text-sm font-medium text-gray-700 mb-1 block">Reason for Return</label>
                 <textarea
