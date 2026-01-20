@@ -73,12 +73,14 @@ export default function NewBill() {
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
   const [openPopoverIndex, setOpenPopoverIndex] = useState<number | null>(null);
-  const [openNamePopoverIndex, setOpenNamePopoverIndex] = useState<number | null>(null);
+  const [openNamePopoverIndex, setOpenNamePopoverIndex] = useState<
+    number | null
+  >(null);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [newBillItems, setNewBillItems] = useState<any[]>([]);
   const [generatedBillHtml, setGeneratedBillHtml] = useState<string | null>(
-    null
+    null,
   );
   const [showGeneratedBill, setShowGeneratedBill] = useState(false);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
@@ -87,6 +89,7 @@ export default function NewBill() {
     billId: string;
     status: string;
   } | null>(null);
+  const [exitConfirmationOpen, setExitConfirmationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
 
   const initialColumns = [
@@ -142,7 +145,7 @@ export default function NewBill() {
             ...item,
             billId: bill._id,
             uniqueId: item._id || `${bill._id}-${idx}`,
-          }))
+          })),
         );
 
         const flattenedRows = allItems.map((item: any, index: number) => {
@@ -154,7 +157,7 @@ export default function NewBill() {
             sno: `${String(sno).padStart(2, "0")}.`,
             lot: item.batch || "N/A",
             cd: item.discountPercent,
-            netAmount: item.total,
+            netAmount: item.taxableAmount, // ✅ correct net
             tax: item.gstPercent,
           };
         });
@@ -168,7 +171,8 @@ export default function NewBill() {
         setRows([]);
       } else {
         console.error("Failed to fetch bills:", error);
-        const errorMessage = error.response?.data?.message || "Could not fetch bills.";
+        const errorMessage =
+          error.response?.data?.message || "Could not fetch bills.";
         toast.error(errorMessage);
       }
     } finally {
@@ -185,7 +189,10 @@ export default function NewBill() {
         // Support multiple response shapes from API (rows, products, data array, etc.)
         let productData: any[] = [];
 
-        if (response?.data?.data?.rows && Array.isArray(response.data.data.rows)) {
+        if (
+          response?.data?.data?.rows &&
+          Array.isArray(response.data.data.rows)
+        ) {
           productData = response.data.data.rows;
         } else if (
           response?.data?.data?.products &&
@@ -194,7 +201,10 @@ export default function NewBill() {
           productData = response.data.data.products;
         } else if (response?.data?.rows && Array.isArray(response.data.rows)) {
           productData = response.data.rows;
-        } else if (response?.data?.products && Array.isArray(response.data.products)) {
+        } else if (
+          response?.data?.products &&
+          Array.isArray(response.data.products)
+        ) {
           productData = response.data.products;
         } else if (response?.data?.data && Array.isArray(response.data.data)) {
           productData = response.data.data;
@@ -230,13 +240,14 @@ export default function NewBill() {
   useEffect(() => {
     localStorage.setItem(
       "billDetailsTableColumnOrder_v2",
-      JSON.stringify(columns)
+      JSON.stringify(columns),
     );
   }, [columns]);
 
   useEffect(() => {
     // When a product popover is open, redirect page wheel scrolling to the popover
-    const activeIndex = openPopoverIndex !== null ? openPopoverIndex : openNamePopoverIndex;
+    const activeIndex =
+      openPopoverIndex !== null ? openPopoverIndex : openNamePopoverIndex;
     if (activeIndex === null) return;
 
     const selector = `.product-popover-content[data-row-index="${activeIndex}"]`;
@@ -247,7 +258,8 @@ export default function NewBill() {
 
       const delta = e.deltaY;
       const atTop = pop.scrollTop === 0;
-      const atBottom = Math.abs(pop.scrollHeight - pop.clientHeight - pop.scrollTop) <= 1;
+      const atBottom =
+        Math.abs(pop.scrollHeight - pop.clientHeight - pop.scrollTop) <= 1;
 
       // If popover cannot scroll further in the direction, allow the page to scroll
       if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
@@ -307,6 +319,7 @@ export default function NewBill() {
     const billItems = newBillItems
       .map((row) => ({
         productId: row.productId,
+        product: row.productId,
         itemCode: row.itemCode,
         itemName: row.itemName,
         companyName: row.companyName,
@@ -321,6 +334,13 @@ export default function NewBill() {
         // The backend should calculate other fields like taxableAmount, gst, total etc.
       }))
       .filter((item) => item.itemCode && item.qty > 0);
+
+    if (billItems.some((item) => !item.productId)) {
+      toast.error(
+        "Some items are missing Product ID. Please remove and re-add them.",
+      );
+      return;
+    }
 
     if (billItems.length === 0) {
       toast.error("Please add at least one product with a quantity.");
@@ -360,28 +380,31 @@ export default function NewBill() {
       setOpenAddProductModal(false);
       setOpenPreview(false);
       setEditingBillId(null);
-      
+
       if (customerId) {
         await fetchBills();
       } else {
-        const savedBill = responseData?.data || responseData?.bill || responseData;
+        const savedBill =
+          responseData?.data || responseData?.bill || responseData;
         if (savedBill && Array.isArray(savedBill.items)) {
-             const flattenedRows = savedBill.items.map((item: any, index: number) => {
-                const sno = index + 1;
-                return {
-                    ...savedBill,
-                    ...item,
-                    billId: savedBill._id,
-                    uniqueId: item._id || `${savedBill._id}-${index}`,
-                    adItemCode: `AD${String(sno).padStart(4, "0")}`,
-                    sno: `${String(sno).padStart(2, "0")}.`,
-                    lot: item.batch || "N/A",
-                    cd: item.discountPercent,
-                    netAmount: item.total,
-                    tax: item.gstPercent,
-                };
-            });
-            setRows(flattenedRows);
+          const flattenedRows = savedBill.items.map(
+            (item: any, index: number) => {
+              const sno = index + 1;
+              return {
+                ...savedBill,
+                ...item,
+                billId: savedBill._id,
+                uniqueId: item._id || `${savedBill._id}-${index}`,
+                adItemCode: `AD${String(sno).padStart(4, "0")}`,
+                sno: `${String(sno).padStart(2, "0")}.`,
+                lot: item.batch || "N/A",
+                cd: item.discountPercent,
+                netAmount: item.taxableAmount, // ✅ correct NET
+                tax: item.gstPercent,
+              };
+            },
+          );
+          setRows(flattenedRows);
         }
       }
     } catch (error: any) {
@@ -431,13 +454,13 @@ export default function NewBill() {
       } else {
         toast.error(
           response.message ||
-            "Bill generated but no viewable file was returned."
+            "Bill generated but no viewable file was returned.",
         );
       }
     } catch (error: any) {
       toast.error(
         error.response?.data?.message ||
-          "Failed to generate bill. Please try again."
+          "Failed to generate bill. Please try again.",
       );
       console.error("Error generating bill:", error);
     }
@@ -448,29 +471,36 @@ export default function NewBill() {
     // Filter all rows that belong to this bill to populate the modal
     const billItems = rows.filter((r) => r.billId === billId);
 
-    const formattedItems = billItems.map((item, index) => ({
-      ...item,
-      id: item.uniqueId || `edit-item-${index}`,
-      sno: `${String(index + 1).padStart(2, "0")}.`,
-      // Ensure fields map correctly for the modal inputs
-      mrp: item.rate || item.mrp,
-      cd: item.discountPercent || item.cd,
-      // Ensure productId is present
-      productId:
-        typeof item.productId === "object"
-          ? item.productId?._id
-          : item.productId,
-      // Ensure other fields are present
-      itemCode: item.itemCode,
-      itemName: item.itemName,
-      companyName: item.companyName,
-      hsnCode: item.hsnCode,
-      packing: item.packing,
-      lot: item.lot,
-      qty: item.qty,
-      tax: item.tax,
-      netAmount: item.netAmount,
-    }));
+    const formattedItems = billItems.map((item, index) => {
+      const pId =
+        (item.productId &&
+          (typeof item.productId === "object"
+            ? item.productId._id
+            : item.productId)) ||
+        (item.product &&
+          (typeof item.product === "object" ? item.product._id : item.product));
+
+      return {
+        ...item,
+        id: item.uniqueId || `edit-item-${index}`,
+        sno: `${String(index + 1).padStart(2, "0")}.`,
+        // Ensure fields map correctly for the modal inputs
+        mrp: item.rate || item.mrp,
+        cd: item.discountPercent || item.cd,
+        // Ensure productId is present
+        productId: pId,
+        // Ensure other fields are present
+        itemCode: item.itemCode,
+        itemName: item.itemName,
+        companyName: item.companyName,
+        hsnCode: item.hsnCode,
+        packing: item.packing,
+        lot: item.lot,
+        qty: item.qty,
+        tax: item.tax,
+        netAmount: item.taxableAmount,
+      };
+    });
 
     setEditingBillId(billId);
     setNewBillItems(formattedItems);
@@ -523,11 +553,8 @@ export default function NewBill() {
       const mrp = Number(product.mrp) || 0;
       const qty = Number(row.qty) || 1;
       const cd = Number(product.discount) || 0;
-      const tax =
-  row.tax !== undefined && row.tax !== ""
-    ? Number(row.tax)
-    : Number(product.gst) || 0;
-
+      // Always use the selected product's GST rate to prevent carrying over tax from previous selection
+      const tax = Number(product.gst) || 0;
 
       const calc = calculateRowAmount({ mrp, qty, cd, tax });
 
@@ -557,7 +584,7 @@ export default function NewBill() {
   const handleNewBillItemChange = (
     index: number,
     field: string,
-    value: string
+    value: string,
   ) => {
     setNewBillItems((currentRows) => {
       const newRows = [...currentRows];
@@ -585,7 +612,7 @@ export default function NewBill() {
 
   const handleRemoveNewBillItem = (idToRemove: string) => {
     setNewBillItems((prevItems) =>
-      prevItems.filter((item) => item.id !== idToRemove)
+      prevItems.filter((item) => item.id !== idToRemove),
     );
   };
 
@@ -616,8 +643,8 @@ export default function NewBill() {
       } else {
         setRows((prevRows) =>
           prevRows.map((row) =>
-            row.billId === billId ? { ...row, paymentStatus: status } : row
-          )
+            row.billId === billId ? { ...row, paymentStatus: status } : row,
+          ),
         );
       }
     } catch (error) {
@@ -629,7 +656,7 @@ export default function NewBill() {
     }
   };
 
-  const filteredRows = rows.filter((row) => { 
+  const filteredRows = rows.filter((row) => {
     const query = searchQuery.toLowerCase();
     return (
       (row.itemCode || "").toLowerCase().includes(query) ||
@@ -668,7 +695,7 @@ export default function NewBill() {
 
             <div className="flex flex-wrap justify-end gap-3">
               <Button
-                onClick={() => navigate("/bills", { state: { openAddCustomer: true } })}
+                onClick={() => setExitConfirmationOpen(true)}
                 className="bg-[#E57373] hover:bg-[#d75a5a] text-white rounded-full px-6 py-2 shadow-md whitespace-nowrap"
               >
                 New Bill
@@ -724,7 +751,8 @@ export default function NewBill() {
                     case "netAmount":
                       return <td className="py-3 px-4">{row.netAmount}</td>;
                     case "tax":
-                      return <td className="py-3 px-4">{row.tax}</td>;
+                      return <td className="py-3 px-4">{row.tax}%</td>;
+
                     case "paymentStatus":
                       return (
                         <td className="py-3 px-4">
@@ -847,7 +875,7 @@ export default function NewBill() {
             <Button
               onClick={() => {
                 const iframe = document.getElementById(
-                  "bill-iframe"
+                  "bill-iframe",
                 ) as HTMLIFrameElement;
                 iframe?.contentWindow?.print();
               }}
@@ -913,7 +941,10 @@ export default function NewBill() {
               </thead>
               <tbody>
                 {newBillItems.map((r, i) => (
-                  <tr key={r.id} className="bg-[#F9FAFB] hover:bg-[#F5F5F5] transition">
+                  <tr
+                    key={r.id}
+                    className="bg-[#F9FAFB] hover:bg-[#F5F5F5] transition"
+                  >
                     <td className="p-2">
                       <Input
                         value={r.sno || `0${i + 1}.`}
@@ -943,7 +974,10 @@ export default function NewBill() {
                             readOnly
                           />
                         </PopoverTrigger>
-                        <PopoverContent className="w-[320px] max-h-[360px] p-0 overflow-y-auto product-popover-content" data-row-index={i}>
+                        <PopoverContent
+                          className="w-[320px] max-h-[360px] p-0 overflow-y-auto product-popover-content"
+                          data-row-index={i}
+                        >
                           <Command>
                             <CommandInput placeholder="Search item code..." />
                             <CommandEmpty>No product found.</CommandEmpty>
@@ -980,7 +1014,10 @@ export default function NewBill() {
                             readOnly
                           />
                         </PopoverTrigger>
-                        <PopoverContent className="w-[320px] max-h-[360px] p-0 overflow-y-auto product-popover-content" data-row-index={i}>
+                        <PopoverContent
+                          className="w-[320px] max-h-[360px] p-0 overflow-y-auto product-popover-content"
+                          data-row-index={i}
+                        >
                           <Command>
                             <CommandInput placeholder="Search item name..." />
                             <CommandEmpty>No product found.</CommandEmpty>
@@ -1009,7 +1046,7 @@ export default function NewBill() {
                           handleNewBillItemChange(
                             i,
                             "companyName",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         placeholder="Company"
@@ -1122,7 +1159,11 @@ export default function NewBill() {
                 disabled={isSaving}
                 className="bg-[#E98C81] hover:bg-[#df7c72] text-white rounded-full px-10 py-3 font-medium shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isSaving ? "Saving..." : editingBillId ? "Update Bill" : "Continue"}
+                {isSaving
+                  ? "Saving..."
+                  : editingBillId
+                    ? "Update Bill"
+                    : "Continue"}
               </Button>
             </div>
           </div>
@@ -1339,6 +1380,35 @@ export default function NewBill() {
               className="bg-[#E98C81] hover:bg-[#d37b70] text-white"
             >
               Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* === Exit Confirmation Dialog === */}
+      <Dialog open={exitConfirmationOpen} onOpenChange={setExitConfirmationOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Confirm Exit</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to exit this page?
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setExitConfirmationOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                setExitConfirmationOpen(false);
+                navigate("/bills", { state: { openAddCustomer: true } });
+              }}
+              className="bg-[#E98C81] hover:bg-[#d37b70] text-white"
+            >
+              Yes, Exit
             </Button>
           </DialogFooter>
         </DialogContent>

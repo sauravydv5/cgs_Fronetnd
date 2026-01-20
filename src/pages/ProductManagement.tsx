@@ -156,7 +156,7 @@ export default function ProductManagement() {
   const [subCategories, setSubCategories] = useState<any[]>([]);
 
   const [columns, setColumns] = useState(() => {
-    const savedOrder = localStorage.getItem("productTableColumnOrder");
+    const savedOrder = localStorage.getItem("productTableColumnOrder_v2");
     if (savedOrder) {
       try {
         const savedColumns = JSON.parse(savedOrder);
@@ -201,7 +201,7 @@ export default function ProductManagement() {
   const currentProducts = filteredProducts.slice(startIndex, endIndex);
 
   useEffect(() => {
-    localStorage.setItem("productTableColumnOrder", JSON.stringify(columns));
+    localStorage.setItem("productTableColumnOrder_v2", JSON.stringify(columns));
   }, [columns]);
 
   const fetchProducts = useCallback(async () => {
@@ -1384,6 +1384,12 @@ export default function ProductManagement() {
                               </SelectTrigger>
                               <SelectContent className="category-select-content max-h-[360px] overflow-y-auto">
                                 {subCategories
+                                  .filter((sub) => {
+                                    if (!formData.category) return true;
+                                    const p = sub.parent || sub.category;
+                                    const pId = p && typeof p === "object" ? p._id : p;
+                                    return pId === formData.category;
+                                  })
                                   .map((sub) => (
                                     <SelectItem key={sub._id} value={sub._id}>
                                       {sub.name}
@@ -1753,19 +1759,53 @@ export default function ProductManagement() {
           <DialogHeader>
             <DialogTitle>Scan Product Barcode</DialogTitle>
             <DialogDescription>
-              Point your camera at a product's barcode.
+              Point your camera at a product's barcode or enter the code manually.
             </DialogDescription>
           </DialogHeader>
-          <div className="py-4 h-[300px] sm:h-[400px] w-full bg-gray-100 rounded-md overflow-hidden relative flex items-center justify-center">
-            <p className="text-gray-500 text-sm absolute">Camera loading... Ensure permission is granted.</p>
-            {scanBarcodeDialogOpen && (
-              <BarcodeScanner
-                onUpdate={handleBarcodeScan}
-                onError={(err) => toast.error("Camera access error: " + err)}
-                width="100%"
-                height="100%"
+          <div className="space-y-4">
+            <div className="py-4 h-[300px] sm:h-[400px] w-full bg-black rounded-md overflow-hidden relative flex items-center justify-center">
+              <p className="text-white/50 text-sm absolute">Camera loading... Ensure permission is granted.</p>
+              {scanBarcodeDialogOpen && (
+                <BarcodeScanner
+                  onUpdate={handleBarcodeScan}
+                  onError={(err) => console.error("Camera access error: " + err)}
+                  width="100%"
+                  height="100%"
+                  facingMode="environment"
+                />
+              )}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="h-px bg-gray-200 flex-1" />
+              <span className="text-xs text-gray-500 font-medium">OR ENTER MANUALLY</span>
+              <div className="h-px bg-gray-200 flex-1" />
+            </div>
+
+            <div className="flex gap-2">
+              <Input
+                id="manual-barcode-input"
+                placeholder="Enter barcode number"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    const val = (e.target as HTMLInputElement).value;
+                    if (val) handleBarcodeScan(null, { text: val });
+                  }
+                }}
               />
-            )}
+              <Button
+                onClick={() => {
+                  const input = document.getElementById(
+                    "manual-barcode-input"
+                  ) as HTMLInputElement;
+                  if (input && input.value) {
+                    handleBarcodeScan(null, { text: input.value });
+                  }
+                }}
+              >
+                Submit
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>

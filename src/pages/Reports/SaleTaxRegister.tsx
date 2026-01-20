@@ -100,27 +100,32 @@ export default function SaleTaxRegister() {
             };
 
             (bill.items || []).forEach((item: any) => {
-  const cgst = Number(item.cgst || 0);
-  const taxable = Number(item.taxableAmount || 0);
+              const gstRate = Number(item.gstPercent || 0);
+              const cgst = Number(item.cgst || 0);
+              const taxable = Number(item.taxableAmount || 0);
 
-  if (!cgst || !taxable) return;
+              // Using a small tolerance for comparing floating-point numbers
+              const tolerance = 0.01;
 
-  // Detect slab using RANGE (safe for decimals)
-  if (cgst <= taxable * 0.01) {
-    taxBreakdown.cgst1 += cgst;
-  } else if (cgst <= taxable * 0.014) {
-    taxBreakdown.cgst1_4 += cgst;
-  } else if (cgst <= taxable * 0.025) {
-    taxBreakdown.cgst2_5 += cgst;
-  } else if (cgst <= taxable * 0.04) {
-    taxBreakdown.cgst4 += cgst;
-  } else if (cgst <= taxable * 0.06) {
-    taxBreakdown.cgst6 += cgst;
-    taxBreakdown.sale12 += taxable;
-  } else if (cgst <= taxable * 0.09) {
-    taxBreakdown.cgst9 += cgst;
-  }
-});
+              if (Math.abs(gstRate - 2.0) < tolerance) { // 1% CGST
+                taxBreakdown.cgst1 += cgst;
+              } else if (Math.abs(gstRate - 2.8) < tolerance) { // 1.4% CGST
+                taxBreakdown.cgst1_4 += cgst;
+              } else if (Math.abs(gstRate - 5.0) < tolerance) { // 2.5% CGST
+                taxBreakdown.cgst2_5 += cgst;
+              } else if (Math.abs(gstRate - 8.0) < tolerance) { // 4% CGST
+                taxBreakdown.cgst4 += cgst;
+              } else if (Math.abs(gstRate - 12.0) < tolerance) { // 6% CGST
+                taxBreakdown.cgst6 += cgst;
+                taxBreakdown.sale12 += taxable;
+              } else if (Math.abs(gstRate - 18.0) < tolerance) { // 9% CGST
+                taxBreakdown.cgst9 += cgst;
+              } else if (Math.abs(gstRate - 14.0) < tolerance) {
+                taxBreakdown.sale14 += taxable;
+              } else if (Math.abs(gstRate - 20.0) < tolerance) {
+                taxBreakdown.sale20 += taxable;
+              }
+            });
 
 
             return {

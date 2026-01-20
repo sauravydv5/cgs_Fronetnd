@@ -84,7 +84,7 @@ export function AppSidebar() {
                             to={item.href}
                             className={({ isActive }) =>
                               cn(
-                                "flex items-center gap-3 px-3 transition-all duration-300",
+                                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300 mb-1",
                                 isActive
                                   ? "bg-white text-sidebar-foreground shadow-sm"
                                   : "text-sidebar-foreground hover:bg-white"

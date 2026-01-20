@@ -274,9 +274,9 @@ export default function Dashboard() {
             </CardHeader>
             <CardContent>
               <ResponsiveContainer height={300}>
-                <LineChart data={salesData}>
+                <LineChart data={salesData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" />
+                  <XAxis dataKey="label" interval={salesData.length <= 12 ? 0 : "preserveStartEnd"} tick={{ fontSize: 10 }} />
                   <YAxis />
                   <Tooltip />
                   <Line
@@ -301,7 +301,7 @@ export default function Dashboard() {
                   <XAxis dataKey="name" hide />
                   <YAxis />
                   <Tooltip />
-                  <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                  <Bar dataKey="value" radius={[8, 8, 0, 0]} barSize={40}>
                     {productPerformance.map((e, i) => (
                       <Cell key={i} fill={e.color} />
                     ))}
