@@ -25,6 +25,7 @@ import {
 import { getAllCustomers } from "@/adminApi/customerApi";
 import { getAllSuppliers } from "@/adminApi/supplierApi";
 import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 function Ledger() {
   const [activeTab, setActiveTab] = useState("customer");
@@ -52,6 +53,8 @@ function Ledger() {
   const [addLedgerDialogOpen, setAddLedgerDialogOpen] = useState(false);
   const [newLedgerEntry, setNewLedgerEntry] = useState({
     partyId: "",
+    partyName: "",
+    mobileNumber: "",
     date: new Date().toISOString().split("T")[0],
     type: "",
     referenceNo: "",
@@ -60,6 +63,8 @@ function Ledger() {
     transactionType: "debit", // 'debit' or 'credit'
     dueDate: "",
   });
+
+  const today = new Date().toISOString().split("T")[0];
 
   const initialCustomerColumns = [
     { id: "date", label: "DATE" },
@@ -196,7 +201,7 @@ function Ledger() {
       }
     } catch (error) {
       console.error("Error fetching ledger data:", error);
-      alert("Failed to fetch ledger data. Please try again.");
+      toast.error("Failed to fetch ledger data. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -206,11 +211,35 @@ function Ledger() {
     fetchLedgerData();
   }, [fetchLedgerData]);
 
+  const handlePartyChange = (partyId: string) => {
+    if (activeTab === "customer") {
+      const customer = allCustomers.find((c) => c._id === partyId);
+      if (customer) {
+        setNewLedgerEntry({
+          ...newLedgerEntry,
+          partyId,
+          partyName: `${customer.firstName || ""} ${customer.lastName || ""}`.trim(),
+          mobileNumber: customer.phoneNumber || "",
+        });
+      }
+    } else {
+      const supplier = allSuppliers.find((s) => s._id === partyId);
+      if (supplier) {
+        setNewLedgerEntry({
+          ...newLedgerEntry,
+          partyId,
+          partyName: supplier.name || supplier.companyName || "",
+          mobileNumber: supplier.mobileNumber || "",
+        });
+      }
+    }
+  };
+
   useEffect(() => {
     const fetchParties = async () => {
       try {
-        const customersRes = await getAllCustomers();
-        if (
+        const customersRes = await getAllCustomers({ limit: 10000 }); // Fetch all customers
+        if ( 
           customersRes.data &&
           customersRes.data.status &&
           Array.isArray(customersRes.data.data?.customers)
@@ -248,19 +277,15 @@ function Ledger() {
   };
 
   const handleAddLedgerSubmit = async () => {
-    if (
-      !newLedgerEntry.partyId ||
-      !newLedgerEntry.date ||
-      !newLedgerEntry.type ||
-      !newLedgerEntry.amount
-    ) {
-      alert("Please fill all required fields: Party, Date, Type, and Amount.");
-      return;
-    }
-
     setLoading(true);
     try {
-      const { amount, transactionType, ...restOfEntry } = newLedgerEntry;
+      const {
+        amount,
+        transactionType,
+        partyName,
+        mobileNumber,
+        ...restOfEntry
+      } = newLedgerEntry;
       const payload: any = {
         ...restOfEntry,
         ledgerType: activeTab, // 'customer' or 'supplier'
@@ -275,15 +300,28 @@ function Ledger() {
       const response = await addLedgerEntry(payload);
 
       if (response.data.success) {
-        alert("Ledger entry added successfully!");
+        toast.success("Ledger entry added successfully!");
         setAddLedgerDialogOpen(false);
         fetchLedgerData(); // Refresh data
+        // Reset form after successful submission
+        setNewLedgerEntry({
+          partyId: "",
+          partyName: "",
+          mobileNumber: "",
+          date: new Date().toISOString().split("T")[0],
+          type: "",
+          referenceNo: "",
+          paymentMethod: "",
+          amount: "",
+          transactionType: "debit",
+          dueDate: "",
+        });
       } else {
-        alert(response.data.message || "Failed to add ledger entry.");
+        toast.error(response.data.message || "Failed to add ledger entry.");
       }
     } catch (error) {
       console.error("Error adding ledger entry:", error);
-      alert("An error occurred while adding the ledger entry.");
+      toast.error("An error occurred while adding the ledger entry.");
     } finally {
       setLoading(false);
     }
@@ -401,24 +439,18 @@ function Ledger() {
   const tableData = (
     activeTab === "customer" ? customerData : supplierData
   ).filter((item: any) => {
-    // Filter by Type
     if (typeFilter !== "all" && item.type !== typeFilter) return false;
 
-    // Filter by Search Query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
       const matchesName = (item.partyName || "").toLowerCase().includes(query);
       const matchesMobile = (item.mobileNumber || "").toLowerCase().includes(query);
       const matchesRef = (item.referenceNo || "").toLowerCase().includes(query);
       
-      let matchesId = false;
-      if (activeTab === "customer") {
-        const matchedCustomer = allCustomers.find((c: any) => c._id === item.partyId);
-        const customerCode = (matchedCustomer?.customerCode || "").toLowerCase();
-        matchesId = customerCode.includes(query) || (item.partyId || "").toLowerCase().includes(query);
-      } else {
-        matchesId = (item.partyId || "").toLowerCase().includes(query);
-      }
+      // Use partyCode if available, otherwise fall back to partyId for search
+      const partyIdentifier = (item.partyCode || item.partyId || "").toLowerCase();
+      const matchesId = partyIdentifier.includes(query);
+
       return matchesName || matchesMobile || matchesRef || matchesId;
     }
     return true;
@@ -576,12 +608,9 @@ function Ledger() {
                         </td>
                       );
                     case "customerId":
-                      const matchedCustomer = allCustomers.find(
-                        (c: any) => c._id === item.partyId
-                      );
                       return (
                         <td className="px-3 py-3">
-                          {matchedCustomer?.customerCode || item.partyId || "-"}
+                          {item.partyCode || item.partyId || "-"}
                         </td>
                       );
                     case "type":
@@ -696,9 +725,7 @@ function Ledger() {
               </Label>
               <Select
                 value={newLedgerEntry.partyId}
-                onValueChange={(value) =>
-                  setNewLedgerEntry({ ...newLedgerEntry, partyId: value })
-                }
+                onValueChange={handlePartyChange}
               >
                 <SelectTrigger className="col-span-3">
                   <SelectValue
@@ -724,6 +751,30 @@ function Ledger() {
               </Select>
             </div>
             <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="partyName" className="text-right">
+                Name
+              </Label>
+              <Input
+                id="partyName"
+                value={newLedgerEntry.partyName}
+                className="col-span-3 bg-gray-100"
+                readOnly
+                placeholder="Selected party name"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="mobileNumber" className="text-right">
+                Mobile No.
+              </Label>
+              <Input
+                id="mobileNumber"
+                value={newLedgerEntry.mobileNumber}
+                className="col-span-3 bg-gray-100"
+                readOnly
+                placeholder="Selected party mobile"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
               <Label htmlFor="date" className="text-right">
                 Date
               </Label>
@@ -731,9 +782,16 @@ function Ledger() {
                 id="date"
                 type="date"
                 value={newLedgerEntry.date}
-                onChange={(e) =>
-                  setNewLedgerEntry({ ...newLedgerEntry, date: e.target.value })
-                }
+                max={today}
+                onChange={(e) => {
+                  const newDate = e.target.value;
+                  if (newLedgerEntry.dueDate && newDate > newLedgerEntry.dueDate) {
+                    setNewLedgerEntry({ ...newLedgerEntry, date: newDate, dueDate: "" });
+                  } else {
+                    setNewLedgerEntry({ ...newLedgerEntry, date: newDate });
+                  }
+                }}
+                onKeyDown={(e) => e.preventDefault()}
                 className="col-span-3"
               />
             </div>
@@ -843,12 +901,15 @@ function Ledger() {
                   id="dueDate"
                   type="date"
                   value={newLedgerEntry.dueDate}
-                  onChange={(e) =>
+                  min={newLedgerEntry.date}
+                  max={today}
+                  onChange={(e) => {
                     setNewLedgerEntry({
                       ...newLedgerEntry,
                       dueDate: e.target.value,
-                    })
-                  }
+                    });
+                  }}
+                  onKeyDown={(e) => e.preventDefault()}
                   className="col-span-3"
                 />
               </div>

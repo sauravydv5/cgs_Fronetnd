@@ -4,13 +4,14 @@ import { AdminLayout } from "@/components/AdminLayout";
 import {
   getDashboardData,
   getDashboardDataByDateRange,
+  getSalesChartByDateRange,
 } from "@/adminApi/dashboardApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Calendar } from "lucide-react";
 import {
   Dialog,
-  DialogContent,  
+  DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
@@ -66,17 +67,46 @@ export default function Dashboard() {
   ======================= */
   const loadDashboard = async (startDate?: string, endDate?: string) => {
     try {
-      let response;
+      let cards, charts;
 
       if (startDate && endDate) {
-        response = await getDashboardDataByDateRange(startDate, endDate);
+        const salesResponse = await getSalesChartByDateRange(
+          startDate,
+          endDate,
+        );
+        const baseResponse = await getDashboardData(); // For other cards
+
+        if (!salesResponse?.success || !baseResponse?.success) return;
+
+        const salesList = Array.isArray(salesResponse.data)
+          ? salesResponse.data
+          : [];
+        const totalSalesAmount = salesList.reduce(
+          (acc: number, item: any) => acc + (Number(item.total) || 0),
+          0,
+        );
+        const totalOrders = salesList.reduce(
+  (acc: number, item: any) => acc + (Number(item.orders) || 0),
+  0,
+);
+
+
+        // Combine data: use filtered data for sale/order cards & chart, and base data for the rest
+        cards = {
+          ...baseResponse.data.cards,
+          totalSalesAmount,
+          totalOrders,
+        };
+        charts = {
+          ...baseResponse.data.charts,
+          salesChart: salesList,
+        };
       } else {
-        response = await getDashboardData();
+        const response = await getDashboardData();
+        if (!response?.success) return;
+        cards = response.data.cards;
+        charts = response.data.charts;
       }
-
-      if (!response?.success) return;
-
-      const { cards, charts } = response.data;
 
       /* ---------- Cards ---------- */
       setStats([
@@ -104,12 +134,16 @@ export default function Dashboard() {
 
       /* ---------- Sales Chart ---------- */
       let mappedSales = [];
-      const salesChartData = Array.isArray(charts?.salesChart) ? charts.salesChart : [];
+      const salesChartData = Array.isArray(charts?.salesChart)
+        ? charts.salesChart
+        : [];
 
       if (startDate && endDate) {
         const start = new Date(startDate);
         const end = new Date(endDate);
-        setGraphDateRange(`${format(start, "dd MMM yyyy")} - ${format(end, "dd MMM yyyy")}`);
+        setGraphDateRange(
+          `${format(new Date(startDate), "dd MMM yyyy")} - ${format(new Date(endDate), "dd MMM yyyy")}`,
+        );
 
         const diffTime = Math.abs(end.getTime() - start.getTime());
         const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
@@ -130,7 +164,10 @@ export default function Dashboard() {
             const mStr = format(m, "yyyy-MM");
             const total = salesChartData.reduce((acc: number, item: any) => {
               const itemDate = item.date || item._id;
-              if (itemDate && (typeof itemDate === "string" || itemDate instanceof Date)) {
+              if (
+                itemDate &&
+                (typeof itemDate === "string" || itemDate instanceof Date)
+              ) {
                 try {
                   if (format(new Date(itemDate), "yyyy-MM") === mStr) {
                     return acc + (Number(item.total) || 0);
@@ -159,7 +196,10 @@ export default function Dashboard() {
               let match = false;
               if (String(itemDate).startsWith(dateStr)) match = true;
               else {
-                try { if (format(new Date(itemDate), "yyyy-MM-dd") === dateStr) match = true; } catch {}
+                try {
+                  if (format(new Date(itemDate), "yyyy-MM-dd") === dateStr)
+                    match = true;
+                } catch {}
               }
               if (match) return acc + (Number(item.total) || 0);
               return acc;
@@ -169,20 +209,51 @@ export default function Dashboard() {
         }
       } else {
         const monthNames = [
-          "Jan","Feb","Mar","Apr","May","Jun",
-          "Jul","Aug","Sep","Oct","Nov","Dec",
+          "Jan",
+          "Feb",
+          "Mar",
+          "Apr",
+          "May",
+          "Jun",
+          "Jul",
+          "Aug",
+          "Sep",
+          "Oct",
+          "Nov",
+          "Dec",
         ];
         const currentYear = new Date().getFullYear().toString().slice(-2);
         const currentFullYear = new Date().getFullYear();
         setGraphDateRange(`Jan ${currentFullYear} - Dec ${currentFullYear}`);
 
         mappedSales = monthNames.map((month, index) => {
-          const found = salesChartData.find(
-            (item: any) => item.month === index + 1 && item.year === currentFullYear
-          );
+          const mStr = `${currentFullYear}-${String(index + 1).padStart(2, "0")}`;
+
+          const total = salesChartData.reduce((acc: number, item: any) => {
+            // Handle pre-aggregated data (month/year)
+            if (item.month && item.year) {
+              if (item.month === index + 1 && item.year === currentFullYear) {
+                return acc + (Number(item.total) || 0);
+              }
+            }
+            // Handle raw date strings
+            const itemDate = item.date || item._id;
+            if (
+              itemDate &&
+              (typeof itemDate === "string" || itemDate instanceof Date)
+            ) {
+              try {
+                if (format(new Date(itemDate), "yyyy-MM") === mStr) {
+                  return acc + (Number(item.total) || 0);
+                }
+              } catch {}
+            }
+            return acc;
+          }, 0);
+
           return {
             label: `${month} ${currentYear}`,
-            total: found?.total || 0,
+            total: total,
           };
         });
       }
@@ -190,14 +261,21 @@ export default function Dashboard() {
       setSalesData(mappedSales);
 
       /* ---------- Product Performance ---------- */
-      const colors = ["#8B5CF6","#3B82F6","#F97316","#22C55E","#EAB308","#EC4899"];
+      const colors = [
+        "#8B5CF6",
+        "#3B82F6",
+        "#F97316",
+        "#22C55E",
+        "#EAB308",
+        "#EC4899",
+      ];
 
       setProductPerformance(
         charts.productPerformance.map((item: any, index: number) => ({
           name: item.productName,
           value: item.sold,
           color: colors[index % colors.length],
-        }))
+        })),
       );
     } catch (err) {
       console.error("Dashboard Error:", err);
@@ -246,11 +324,23 @@ export default function Dashboard() {
           {stats.map((item, i) => (
             <Card
               key={i}
-              className={`${item.color} border-0 rounded-xl cursor-pointer`}
+              className={`${item.color} border-0 rounded-xl cursor-pointer relative`}
               onClick={() =>
                 item.label === "Low Stock" && navigate("/inventory")
               }
             >
+              {(item.label === "Total Sale" ||
+                item.label === "Total Order") && (
+                <div
+                  className="absolute top-3 right-3 p-2 bg-white/50 rounded-full hover:bg-white/80 transition-colors cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setDateFilterOpen(true);
+                  }}
+                >
+                  <Calendar className="w-4 h-4 text-gray-700" />
+                </div>
+              )}
               <CardContent className="p-6 text-center">
                 <p className="text-sm text-gray-600">{item.label}</p>
                 <p className="text-3xl font-bold mt-2 text-[#A62539]">
@@ -268,22 +358,34 @@ export default function Dashboard() {
               <CardTitle>
                 Sales
                 {graphDateRange && (
-                  <span className="ml-2 text-sm font-normal text-muted-foreground">({graphDateRange})</span>
+                  <span className="ml-2 text-sm font-normal text-muted-foreground">
+                    ({graphDateRange})
+                  </span>
                 )}
               </CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer height={300}>
-                <LineChart data={salesData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
+                <LineChart data={salesData} margin={{ top: 10, right: 10, left: 0, bottom: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="label" interval={salesData.length <= 12 ? 0 : "preserveStartEnd"} tick={{ fontSize: 10 }} />
+                  <XAxis
+                    dataKey="label"
+                    interval={0}
+                    tick={{ fontSize: 10 }}
+                    angle={-45}
+                    textAnchor="end"
+                    height={60}
+                  />
                   <YAxis />
                   <Tooltip />
+
                   <Line
+                    type="monotone"
                     dataKey="total"
                     stroke="#8B5CF6"
                     strokeWidth={3}
                     dot={{ r: 5 }}
+                    name="Monthly Sales"
                   />
                 </LineChart>
               </ResponsiveContainer>

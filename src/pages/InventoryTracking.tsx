@@ -31,6 +31,7 @@ import { getAllProducts, updateProduct, deleteProduct, getLowStockProducts, upda
 import { getAllCategories, getAllSubCategories } from "@/adminApi/categoryApi";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import Barcode from "react-barcode";
 import { Label } from "@/components/ui/label";
 
 export default function InventoryTracking() {
@@ -496,6 +497,16 @@ export default function InventoryTracking() {
 
   return (
     <AdminLayout title="Inventory Tracking">
+      <style>{`
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+          -webkit-appearance: none; 
+          margin: 0; 
+        }
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
       <div
         className="flex flex-col xl:flex-row gap-4 md:gap-6 w-full"
       >
@@ -755,35 +766,172 @@ export default function InventoryTracking() {
 
       {/* View Details Dialog */}
       <Dialog open={!!viewingProduct} onOpenChange={() => setViewingProduct(null)}>
-        <DialogContent className="w-full max-w-lg">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>{viewingProduct?.productName}</DialogTitle>
+            <DialogTitle>Product Details</DialogTitle>
             <DialogDescription>
-              Item Code: {viewingProduct?.itemCode || "N/A"}
+              Detailed information about{" "}
+              <span className="font-bold">{viewingProduct?.productName}</span>.
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="flex justify-center">
-              <div className="w-32 h-32 bg-gray-100 rounded-md flex items-center justify-center overflow-hidden">
-                {viewingProduct?.image ? (
-                  <img src={viewingProduct.image} alt={viewingProduct.productName} className="object-cover w-full h-full" />
-                ) : (
-                  <ImageIcon className="w-12 h-12 text-gray-400" />
-                )}
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-x-8 gap-y-3">
-              <div><p className="text-sm text-muted-foreground">Brand</p><p className="font-medium">{viewingProduct?.brandName || "N/A"}</p></div>
-              <div><p className="text-sm text-muted-foreground">Category</p><p className="font-medium">{viewingProduct?.category?.name || "N/A"}</p></div>
-              <div><p className="text-sm text-muted-foreground">MRP</p><p className="font-medium">Rs. {viewingProduct?.mrp || 0}</p></div>
-              <div><p className="text-sm text-muted-foreground">Cost Price</p><p className="font-medium">Rs. {viewingProduct?.costPrice || 0}</p></div>
-              <div><p className="text-sm text-muted-foreground">Stock</p><p className={`font-medium ${getStockColor(viewingProduct?.stock)}`}>{viewingProduct?.stock ?? 0}</p></div>
-              <div><p className="text-sm text-muted-foreground">GST</p><p className="font-medium">{viewingProduct?.gst || 0}%</p></div>
-            </div>
-            {viewingProduct?.description && (
-              <div>
-                <p className="text-sm text-muted-foreground">Description</p>
-                <p className="font-medium text-sm">{viewingProduct.description}</p>
+          <div className="grid gap-4 py-4 overflow-y-auto px-1">
+            {viewingProduct && (
+              <div className="grid md:grid-cols-3 gap-8">
+                {/* Left Column: Image & Barcode */}
+                <div className="md:col-span-1 space-y-6">
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">
+                      Product Image
+                    </Label>
+                    {viewingProduct.image ? (
+                      <div className="aspect-square w-full bg-muted rounded-lg flex items-center justify-center overflow-hidden border">
+                        <img
+                          src={viewingProduct.image}
+                          alt={viewingProduct.productName}
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    ) : (
+                      <div className="aspect-square w-full bg-muted rounded-lg flex items-center justify-center border">
+                        <ImageIcon className="w-16 h-16 text-muted-foreground/50" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-muted-foreground">Barcode</Label>
+                    <div className="bg-white p-4 rounded-lg border flex flex-col items-center">
+                      <Barcode
+                        value={viewingProduct.itemCode || "NO-CODE"}
+                        width={1.5}
+                        height={60}
+                        fontSize={14}
+                        displayValue={false}
+                      />
+                      <p className="mt-2 text-xs text-muted-foreground tracking-widest">
+                        {viewingProduct.itemCode || "N/A"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Right Column: Details */}
+                <div className="md:col-span-2 space-y-6">
+                  {/* Header */}
+                  <div>
+                    <Badge
+                      variant={
+                        viewingProduct.stock > 0 ? "default" : "destructive"
+                      }
+                      className={
+                        viewingProduct.stock > 0
+                          ? "bg-green-100 text-green-800"
+                          : ""
+                      }
+                    >
+                      {viewingProduct.stock > 0 ? "In Stock" : "Out of Stock"}
+                    </Badge>
+                    <h2 className="text-2xl font-bold mt-2">
+                      {viewingProduct.productName}
+                    </h2>
+                    <p className="text-muted-foreground">
+                      {viewingProduct.brandName || "No Brand"}
+                    </p>
+                  </div>
+
+                  {/* General Info */}
+                  <div className="border-t pt-4">
+                    <h3 className="font-semibold mb-3">General Information</h3>
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Category</span>
+                        <span className="font-medium">
+                          {getCategoryName(viewingProduct)}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">
+                          Sub Category
+                        </span>
+                        <span className="font-medium">
+                          {getSubCategoryName(viewingProduct)}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Item Code</span>
+                        <span className="font-medium">
+                          {viewingProduct?.itemCode || "N/A"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">HSN Code</span>
+                        <span className="font-medium">
+                          {viewingProduct?.hsnCode || "N/A"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Size & Weight</span>
+                        <span className="font-medium">
+                          {viewingProduct?.size || "N/A"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Pack Size</span>
+                        <span className="font-medium">
+                          {viewingProduct?.packSize || "N/A"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Pricing & Inventory */}
+                  <div className="border-t pt-4">
+                    <h3 className="font-semibold mb-3">Pricing & Inventory</h3>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-3 text-sm">
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">MRP</span>
+                        <span className="font-medium">
+                          ₹{viewingProduct.mrp?.toFixed(2) || "0.00"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">
+                          Cost Price
+                        </span>
+                        <span className="font-medium">
+                          ₹{viewingProduct.costPrice?.toFixed(2) || "0.00"}
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Discount</span>
+                        <span className="font-medium">
+                          {viewingProduct.discount || "0"}%
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">GST</span>
+                        <span className="font-medium">
+                          {viewingProduct.gst || "0"}%
+                        </span>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-muted-foreground">Stock</span>
+                        <span className="font-medium">
+                          {viewingProduct.stock || "0"}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Description */}
+                  {viewingProduct.description && (
+                    <div className="border-t pt-4">
+                      <h3 className="font-semibold mb-2">Description</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {viewingProduct.description}
+                      </p>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
           </div>
@@ -931,7 +1079,7 @@ export default function InventoryTracking() {
                   placeholder: "e.g., 12345678",
                 },
                 {
-                  label: "Size",
+                  label: "Size & Weight",
                   name: "size",
                   placeholder: "e.g., Small, Medium, Large",
                 },
@@ -998,6 +1146,7 @@ export default function InventoryTracking() {
                           `Enter ${field.label.toLowerCase()}`
                         }
                         value={formData[field.name as keyof typeof formData]}
+                        min={field.type === "number" ? 0 : undefined}
                         onChange={handleFormChange}
                       />
                     </>

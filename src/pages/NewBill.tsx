@@ -112,7 +112,17 @@ export default function NewBill() {
 
   const [columns, setColumns] = useState(() => {
     const savedOrder = localStorage.getItem("billDetailsTableColumnOrder_v2");
-    return savedOrder ? JSON.parse(savedOrder) : initialColumns;
+    if (savedOrder) {
+      try {
+        const parsed = JSON.parse(savedOrder);
+        const savedIds = new Set(parsed.map((c: any) => c.id));
+        const missingColumns = initialColumns.filter((c) => !savedIds.has(c.id));
+        return [...parsed, ...missingColumns];
+      } catch (e) {
+        return initialColumns;
+      }
+    }
+    return initialColumns;
   });
 
   const fetchBills = React.useCallback(async () => {
@@ -325,7 +335,7 @@ export default function NewBill() {
         companyName: row.companyName,
         hsnCode: row.hsnCode,
         packing: row.packing,
-        batch: row.lot === "N/A" ? "" : row.lot, // Map lot back to batch
+        batch: row.lot === "N/A" ? "" : (row.lot || ""), // Map lot back to batch
         qty: Number(row.qty) || 0,
         rate: Number(row.mrp) || 0,
         mrp: Number(row.mrp) || 0,
@@ -382,6 +392,7 @@ export default function NewBill() {
       setEditingBillId(null);
 
       if (customerId) {
+        await new Promise((resolve) => setTimeout(resolve, 500));
         await fetchBills();
       } else {
         const savedBill =
@@ -667,6 +678,16 @@ export default function NewBill() {
 
   return (
     <AdminLayout title={`Bill Listing > ${customerInfo.name || "Customer"}`}>
+      <style>{`
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+          -webkit-appearance: none; 
+          margin: 0; 
+        }
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
       <div className="p-4 sm:p-6 bg-white min-h-screen text-[#3E3E3E] flex flex-col justify-between overflow-hidden relative">
         {/* === Top Section === */}
         <div className="space-y-6">
@@ -1092,6 +1113,7 @@ export default function NewBill() {
                         placeholder="MRP"
                         type="number"
                         className="bg-white"
+                        min={0}
                       />
                     </td>
                     <td className="p-2">
@@ -1103,6 +1125,7 @@ export default function NewBill() {
                         placeholder="Qty"
                         type="number"
                         className="bg-white"
+                        min={0}
                       />
                     </td>
                     <td className="p-2">
@@ -1114,6 +1137,7 @@ export default function NewBill() {
                         placeholder="C.D"
                         type="number"
                         className="bg-white"
+                        min={0}
                       />
                     </td>
                     <td className="p-2">
@@ -1134,6 +1158,7 @@ export default function NewBill() {
                         placeholder="Tax"
                         type="number"
                         className="bg-white"
+                        min={0}
                       />
                     </td>
                     <td className="p-2 text-center">

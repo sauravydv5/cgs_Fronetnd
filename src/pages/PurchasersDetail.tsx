@@ -310,6 +310,16 @@ export default function PurchasersDetail() {
 
   return (
     <AdminLayout title="Purchasers Detail">
+      <style>{`
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+          -webkit-appearance: none; 
+          margin: 0; 
+        }
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
       <div className="bg-white rounded-xl p-6 shadow-sm">
         {/* Search + Add Button */}
         <div className="flex items-center justify-between mb-6">
@@ -563,11 +573,11 @@ export default function PurchasersDetail() {
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Purchases</label>
-            <Input name="purchases" type="number" value={newSupplier.purchases} onChange={handleInputChange} placeholder="Purchases" className="h-9" />
+            <Input name="purchases" type="number" min="0" value={newSupplier.purchases} onChange={handleInputChange} placeholder="Purchases" className="h-9" />
           </div>
           <div>
             <label className="text-xs font-medium text-gray-700 ml-1 mb-1 block">Returns</label>
-            <Input name="returns" type="number" value={newSupplier.returns} onChange={handleInputChange} placeholder="Returns" className="h-9" />
+            <Input name="returns" type="number" min="0" value={newSupplier.returns} onChange={handleInputChange} placeholder="Returns" className="h-9" />
           </div>
         </div>
 

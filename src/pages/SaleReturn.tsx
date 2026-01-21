@@ -140,7 +140,7 @@ export default function SaleReturn() {
         billId: ret.billNo || (typeof ret.billId === 'object' ? ret.billId?.billId : ret.billId) || "N/A",
         date: ret.date || ret.createdAt,
         customerName: ret.customerName || (ret.customerId?.firstName ? `${ret.customerId.firstName} ${ret.customerId.lastName}` : "N/A"),
-        totalAmount: ret.totalAmount !== undefined ? ret.totalAmount : (ret.refundAmount || 0),
+        totalAmount: ret.refundAmount !== undefined ? ret.refundAmount : (ret.totalAmount || 0),
         reason: ret.reason || ret.returnReason || "-",
         status: ret.status || "PENDING",
       }));
@@ -483,7 +483,9 @@ export default function SaleReturn() {
                       ) : column.id === 'date' ? (
                         formatDate(ret.date)
                       ) : (
-                        ret[column.id as keyof typeof ret] ?? "N/A"
+                        column.id === 'totalAmount'
+                          ? `₹${Number(ret.totalAmount).toFixed(2)}`
+                          : ret[column.id as keyof typeof ret] ?? "N/A"
                       )}
                     </td>
                   ))}

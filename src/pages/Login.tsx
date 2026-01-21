@@ -151,7 +151,7 @@ export default function Login() {
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
-                  className="border border-gray-300 h-11 rounded-md focus:ring-2 focus:ring-pink-400 pr-10"
+                  className="border border-gray-300 h-11 rounded-md focus:ring-2 focus:ring-pink-400 pr-10 hide-password-toggle"
                 />
                 <button
                   type="button"
@@ -160,9 +160,9 @@ export default function Login() {
                   className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-gray-100"
                 >
                   {showPassword ? (
-                    <EyeOff size={18} className="text-gray-600" />
-                  ) : (
                     <Eye size={18} className="text-gray-600" />
+                  ) : (
+                    <EyeOff size={18} className="text-gray-600" />
                   )}
                 </button>
               </div>

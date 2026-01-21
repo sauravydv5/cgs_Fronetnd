@@ -112,15 +112,35 @@ export default function Sale() {
     { id: "date", header: "DATE", size: "1.3fr" },
     { id: "customerName", header: "CUSTOMER NAME", size: "2fr" },
     { id: "discount", header: "DISCOUNT %", size: "1fr" },
-    { id: "sgst", header: "SGST", size: "1fr" },
-    { id: "totalAmount", header: "TOTAL AMOUNT", size: "1.6fr" },
-    { id: "cgst", header: "CGST", size: "1fr" },
     { id: "amountAfterDiscount", header: "AMT AFT DIS", size: "1.6fr" },
+    { id: "cgst", header: "CGST ₹", size: "1fr" },
+    { id: "sgst", header: "SGST ₹", size: "1fr" },
+    { id: "totalAmount", header: "TOTAL AMOUNT", size: "1.6fr" },
     // { id: "paymentStatus", header: "PAYMENT STATUS", size: "1.5fr" },
     { id: "action", header: "ACTION", size: "1.5fr" },
   ];
 
-  const [columns, setColumns] = useState(initialColumns);
+  const [columns, setColumns] = useState(() => {
+    const savedOrder = localStorage.getItem("saleTableColumnOrder");
+    if (savedOrder) {
+      try {
+        const parsed = JSON.parse(savedOrder);
+        const initialIds = new Set(initialColumns.map((c) => c.id));
+        const validSaved = parsed.filter((c: any) => initialIds.has(c.id));
+        const savedIds = new Set(validSaved.map((c: any) => c.id));
+        const missingColumns = initialColumns.filter((c) => !savedIds.has(c.id));
+        return [...validSaved, ...missingColumns];
+      } catch (e) {
+        return initialColumns;
+      }
+    }
+    return initialColumns;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("saleTableColumnOrder", JSON.stringify(columns));
+  }, [columns]);
+
   const [bills, setBills] = useState<any[]>([]);
   const [allBills, setAllBills] = useState<any[]>([]); // To store all bills
   const [loading, setLoading] = useState(true);
@@ -379,7 +399,8 @@ export default function Sale() {
       .map((i) => ({
         ...i,
         qty: Number(i.returnQty), // Send the return quantity
-        total: ((Number(i.total) || Number(i.netAmount) || 0) / (Number(i.qty) || 1)) * Number(i.returnQty)
+        total: ((Number(i.total) || Number(i.netAmount) || 0) / (Number(i.qty) || 1)) * Number(i.returnQty),
+        finalAmount: ((Number(i.total) || Number(i.netAmount) || 0) / (Number(i.qty) || 1)) * Number(i.returnQty)
       }));
 
     if (selectedItems.length === 0) {

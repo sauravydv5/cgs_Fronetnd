@@ -523,6 +523,16 @@ export default function PurchaseDetail() {
 
   return (
     <AdminLayout title="Purchase > Purchase Detail">
+      <style>{`
+        input[type=number]::-webkit-inner-spin-button, 
+        input[type=number]::-webkit-outer-spin-button { 
+          -webkit-appearance: none; 
+          margin: 0; 
+        }
+        input[type=number] {
+          -moz-appearance: textfield;
+        }
+      `}</style>
       <div className="p-6">
         {/* Header & Search Section */}
         <div className="flex justify-between items-center mb-6">
@@ -805,7 +815,7 @@ export default function PurchaseDetail() {
 
               <div>
                 <label className="text-sm font-medium">Total Amount <span className="text-red-500">*</span></label>
-                <Input type="number" name="totalAmount" placeholder="e.g., 15000" value={newPurchase.totalAmount} onChange={handleInputChange} readOnly={purchaseItems.length > 0} className={purchaseItems.length > 0 ? "bg-gray-100" : ""} />
+                <Input type="number" min="0" name="totalAmount" placeholder="e.g., 15000" value={newPurchase.totalAmount} onChange={handleInputChange} readOnly={purchaseItems.length > 0} className={purchaseItems.length > 0 ? "bg-gray-100" : ""} />
               </div>
               <div>
                 <label className="text-sm font-medium">Payment Method</label>

@@ -591,15 +591,22 @@ export default function ProductManagement() {
     const sCat = product.subcategory;
 
     let parentCatId = "";
-    let subCatId = "";
+    let subCatVal = "";
 
     // 1. Try to get IDs directly
     if (pCat) parentCatId = typeof pCat === 'object' ? pCat._id : pCat;
-    if (sCat) subCatId = typeof sCat === 'object' ? sCat._id : sCat;
+    if (sCat) {
+      if (typeof sCat === 'object' && sCat.name) {
+        subCatVal = sCat.name;
+      } else if (typeof sCat === 'string') {
+        const found = subCategories.find(s => s._id === sCat);
+        if (found) subCatVal = found.name;
+      }
+    }
 
     // 2. If we have a subcategory but no parent, try to find parent from subcategory list
-    if (!parentCatId && subCatId) {
-      const sub = subCategories.find(s => s._id === subCatId);
+    if (!parentCatId && subCatVal) {
+      const sub = subCategories.find(s => s.name === subCatVal);
       if (sub) {
         const p = sub.parent || sub.category;
         if (p) parentCatId = typeof p === 'object' ? p._id : p;
@@ -607,10 +614,10 @@ export default function ProductManagement() {
     }
 
     // 3. Fallback: Check if the 'category' field actually holds a subcategory ID (legacy/mixed data)
-    if (!subCatId && parentCatId) {
+    if (!subCatVal && parentCatId) {
       const subAsCat = subCategories.find(s => s._id === parentCatId);
       if (subAsCat) {
-        subCatId = parentCatId;
+        subCatVal = subAsCat.name;
         const p = subAsCat.parent || subAsCat.category;
         if (p) parentCatId = typeof p === 'object' ? p._id : p;
       }
@@ -620,7 +627,7 @@ export default function ProductManagement() {
       brandName: product.brandName || "",
       productName: product.productName || "",
       category: parentCatId,
-      subcategory: subCatId,
+      subcategory: subCatVal || "",
       mrp: product.mrp?.toString() || "",
       costPrice: product.costPrice?.toString() || "",
       stock: product.stock?.toString() || "",
@@ -802,9 +809,35 @@ export default function ProductManagement() {
         try {
           // Example of how you might call the API in a loop
           for (const product of productsToUpload) {
+            let categoryId = product.category;
+            if (categoryId) {
+              const matchedCategory = categories.find(
+                (c) =>
+                  c.name.toLowerCase() === String(categoryId).trim().toLowerCase() ||
+                  c._id === String(categoryId).trim()
+              );
+              if (matchedCategory) {
+                categoryId = matchedCategory._id;
+              }
+            }
+
+            let subCategoryId = product.subcategory;
+            if (subCategoryId) {
+              const matchedSubCategory = subCategories.find(
+                (s) =>
+                  s.name.toLowerCase() === String(subCategoryId).trim().toLowerCase() ||
+                  s._id === String(subCategoryId).trim()
+              );
+              if (matchedSubCategory) {
+                subCategoryId = matchedSubCategory._id;
+              }
+            }
+
             // Assuming your CSV has an 'image' column with the URL
             const payload = {
               ...product,
+              category: categoryId,
+              subcategory: subCategoryId,
               // Ensure numeric fields are parsed correctly
               mrp: parseFloat(product.mrp) || 0,
               costPrice: parseFloat(product.costPrice) || 0,
@@ -1311,7 +1344,7 @@ export default function ProductManagement() {
                   placeholder: "e.g., 12345678",
                 },
                 {
-                  label: "Size",
+                  label: "Size & Weight",
                   name: "size",
                   placeholder: "e.g., Small, Medium, Large",
                 },
@@ -1391,7 +1424,7 @@ export default function ProductManagement() {
                                     return pId === formData.category;
                                   })
                                   .map((sub) => (
-                                    <SelectItem key={sub._id} value={sub._id}>
+                                    <SelectItem key={sub._id} value={sub.name}>
                                       {sub.name}
                                     </SelectItem>
                                   ))}
@@ -1411,6 +1444,7 @@ export default function ProductManagement() {
                         `Enter ${field.label.toLowerCase()}`
                       }
                       value={formData[field.name as keyof typeof formData]}
+                      min={field.type === "number" ? 0 : undefined}
                       onChange={handleFormChange}
                     />
                   )}
@@ -1648,7 +1682,7 @@ export default function ProductManagement() {
                         </span>
                       </div>
                       <div className="flex flex-col">
-                        <span className="text-muted-foreground">Size</span>
+                        <span className="text-muted-foreground">Size & Weight</span>
                         <span className="font-medium">
                           {productToView?.size || "N/A"}
                         </span>
@@ -1827,7 +1861,7 @@ export default function ProductManagement() {
               <div className="bg-muted p-3 rounded-md text-xs space-y-2 mt-3">
                 <p className="font-semibold">Required CSV Headers:</p>
                 <code className="block bg-background p-2 rounded text-[10px] overflow-x-auto">
-                  productName,brandName,category,mrp,costPrice,stock,itemCode,gst,hsnCode,size,discount,packSize,image
+                  productName,brandName,category,subcategory,mrp,costPrice,stock,itemCode,gst,hsnCode,size,discount,packSize,image
                 </code>
                 <div className="text-[11px] text-muted-foreground space-y-1 mt-2">
                   <p>
@@ -1837,6 +1871,9 @@ export default function ProductManagement() {
                   <p>
                     • <strong>category:</strong> Use exact category name from
                     your system
+                  </p>
+                  <p>
+                    • <strong>subcategory:</strong> Use exact sub-category name (optional)
                   </p>
                   <p>
                     • <strong>image:</strong> Provide direct image URL

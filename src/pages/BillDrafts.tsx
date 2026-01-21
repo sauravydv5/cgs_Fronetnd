@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Trash2, FileClock, GripVertical, Search, CircleUser, User, CalendarDays, BadgeIndianRupee, Hash, Percent } from "lucide-react";
 import { getAllNewBills, updateBillPaymentStatus } from "@/adminApi/billApi";
+import { getAllSaleReturns, updateReturnStatus } from "@/adminApi/saleReturnApi";
 import { format } from "date-fns";
 import {
   Select,
@@ -48,6 +49,7 @@ import { CSS } from "@dnd-kit/utilities";
 const defaultColumns = [
   { id: "drag", label: "" },
   { id: "billNo", label: "Bill No" },
+  { id: "type", label: "Type" },
   { id: "customer", label: "Customer" },
   { id: "date", label: "Date" },
   { id: "total", label: "Total Amount" },
@@ -123,6 +125,15 @@ const SortableRow = ({ bill, columns, onStatusChange, onClick }: { bill: any; co
             </TableCell>
           );
         }
+        if (col.id === "type") {
+          return (
+            <TableCell key={col.id} className="text-center">
+              <Badge variant={bill.type === 'SR' ? 'destructive' : 'secondary'}>
+                {bill.type}
+              </Badge>
+            </TableCell>
+          );
+        }
         if (col.id === "status") {
           return (
             <TableCell key={col.id} className="text-center">
@@ -135,10 +146,19 @@ const SortableRow = ({ bill, columns, onStatusChange, onClick }: { bill: any; co
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Paid">Paid</SelectItem>
-                  {/* <SelectItem value="Pending">Pending</SelectItem> */}
-                  <SelectItem value="Unpaid">Unpaid</SelectItem>
-                  <SelectItem value="Draft">Draft</SelectItem>
+                  {bill.type === 'SR' ? (
+                    <>
+                      <SelectItem value="PENDING">Pending</SelectItem>
+                      <SelectItem value="APPROVED">Approved</SelectItem>
+                      <SelectItem value="REJECTED">Rejected</SelectItem>
+                    </>
+                  ) : (
+                    <>
+                      <SelectItem value="Paid">Paid</SelectItem>
+                      <SelectItem value="Unpaid">Unpaid</SelectItem>
+                      <SelectItem value="Draft">Draft</SelectItem>
+                    </>
+                  )}
                 </SelectContent>
               </Select>
               </div>
@@ -173,34 +193,32 @@ function BillDrafts() {
   }, [columns]);
 
   useEffect(() => {
-    const fetchDrafts = async () => {
+    const fetchDraftsAndReturns = async () => {
       try {
         setLoading(true);
-        const response = await getAllNewBills();
+        const [billResponse, returnResponse] = await Promise.all([
+          getAllNewBills(),
+          getAllSaleReturns(),
+        ]);
         
         // Handle different response structures
-        let data = [];
-        if (response && Array.isArray(response)) {
-          data = response;
-        } else if (response && response.data && Array.isArray(response.data)) {
-          data = response.data;
-        } else if (response && response.bills && Array.isArray(response.bills)) {
-          data = response.bills;
+        let billData = [];
+        if (billResponse && Array.isArray(billResponse)) {
+          billData = billResponse;
+        } else if (billResponse && billResponse.data && Array.isArray(billResponse.data)) {
+          billData = billResponse.data;
+        } else if (billResponse && billResponse.bills && Array.isArray(billResponse.bills)) {
+          billData = billResponse.bills;
         }
 
-        // Filter for Draft and Unpaid
-        const filteredData = data.filter((bill: any) => {
-            const status = bill.paymentStatus || bill.status || "Draft";
-            return status === "Draft" || status === "Unpaid";
-        });
-
-        const formattedBills = filteredData.map((bill: any) => ({
+        const formattedBills = billData.map((bill: any) => ({
           id: bill._id, // Unique ID for DnD
           billNo: bill.billNo || "N/A",
           customer: bill.customerName || bill.customerId?.firstName || "Unknown",
           date: bill.createdAt ? format(new Date(bill.createdAt), "dd MMM yyyy") : "N/A",
           total: `₹${bill.netAmount || bill.totalAmount || bill.grandTotal || 0}`,
           status: bill.paymentStatus || "Draft",
+          type: 'SL',
           customerId: bill.customerId?._id || bill.customerId,
           customerName: bill.customerName || bill.customerId?.firstName || "Unknown",
           // Details for modal
@@ -213,14 +231,39 @@ function BillDrafts() {
           agentName: bill.agentName || "N/A",
         }));
 
-        setBills(formattedBills);
+        // Handle sale returns
+        let returnData = [];
+        if (returnResponse && Array.isArray(returnResponse.data)) {
+          returnData = returnResponse.data;
+        } else if (returnResponse && Array.isArray(returnResponse.saleReturns)) {
+          returnData = returnResponse.saleReturns;
+        } else if (Array.isArray(returnResponse)) {
+          returnData = returnResponse;
+        }
+
+        const formattedReturns = returnData.map((ret: any) => ({
+          id: `return-${ret._id}`,
+          billNo: ret.returnId || ret._id.slice(-6).toUpperCase(),
+          customer: ret.customerName || ret.customerId?.firstName || "Unknown",
+          date: ret.createdAt ? format(new Date(ret.createdAt), "dd MMM yyyy") : "N/A",
+          total: `₹${ret.refundAmount || 0}`,
+          status: ret.status || "PENDING",
+          type: 'SR',
+          items: ret.items || [],
+          grandTotal: ret.refundAmount || 0,
+        }));
+
+        const combinedData = [...formattedBills, ...formattedReturns];
+        combinedData.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+        setBills(combinedData);
       } catch (error) {
         console.error("Failed to fetch drafts:", error);
       } finally {
         setLoading(false);
       }
     };
-    fetchDrafts();
+    fetchDraftsAndReturns();
   }, []);
 
   const sensors = useSensors(
@@ -271,20 +314,18 @@ function BillDrafts() {
     const { billId, status } = pendingStatusUpdate;
 
     try {
-      await updateBillPaymentStatus(billId, status);
-      toast.success("Payment status updated");
-      if (status !== 'Draft' && status !== 'Unpaid') {
-        const updatedBill = bills.find(b => b.id === billId);
-        if (updatedBill && updatedBill.customerId) {
-          navigate(`/bills/new-bill?customerId=${updatedBill.customerId}`, {
-            state: { customerName: updatedBill.customerName }
-          });
-        } else {
-          setBills((prevBills) => prevBills.filter((bill) => bill.id !== billId));
-        }
+      const itemToUpdate = bills.find(b => b.id === billId);
+      if (itemToUpdate?.type === 'SR') {
+        // It's a sale return, remove prefix for API call
+        await updateReturnStatus(billId.replace('return-', ''), status);
       } else {
-        setBills((prevBills) => prevBills.map((bill) => (bill.id === billId ? { ...bill, status: status } : bill)));
+        // It's a bill
+        await updateBillPaymentStatus(billId, status);
       }
+
+      toast.success("Payment status updated");
+      setBills((prevBills) => prevBills.map((bill) => (bill.id === billId ? { ...bill, status: status } : bill)));
+
     } catch (error) {
       console.error("Failed to update status", error);
       toast.error("Failed to update status");
@@ -394,7 +435,7 @@ function BillDrafts() {
               <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/10 rounded-full -ml-12 -mb-12"></div>
               <div className="relative z-10">
                 <DialogTitle className="text-2xl font-extrabold tracking-tight mb-1">
-                  Bill Details
+                  {selectedBill?.type === 'SR' ? 'Sale Return Details' : 'Bill Details'}
                 </DialogTitle>
                 <span className="bg-white text-[#f97a63] text-sm font-bold px-7 py-1.5 rounded-full shadow-lg">
                   #{selectedBill?.billNo}
