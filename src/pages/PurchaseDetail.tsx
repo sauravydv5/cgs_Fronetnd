@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { AdminLayout } from "@/components/AdminLayout";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Calendar, Edit3, Trash2, Eye, Undo2, Check, ChevronsUpDown } from "lucide-react";
+import { Search, Calendar, Edit3, Trash2, Eye, Undo2, Check, ChevronsUpDown, X } from "lucide-react";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -697,13 +697,15 @@ export default function PurchaseDetail() {
 
       {/* Add/Edit Purchase Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex justify-center items-center z-50 overflow-y-auto py-10">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-2xl my-auto">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">{editingPurchase ? "Edit Purchase" : "Add New Purchase"}</h3>
-              <button onClick={resetForm} className="text-gray-500 hover:text-gray-800">&times;</button>
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex justify-center items-center z-50 overflow-y-auto py-10">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl my-auto overflow-hidden">
+            <div className="bg-white p-6 flex justify-between items-center border-b">
+              <h3 className="text-xl font-bold text-gray-800">{editingPurchase ? "Edit Purchase" : "Add New Purchase"}</h3>
+              <button onClick={resetForm} className="bg-[#E98C81] text-white hover:bg-[#d97a71] transition-colors p-1 rounded-md">
+                <X size={24} />
+              </button>
             </div>
-            <div className="space-y-4">
+            <div className="p-6 space-y-4">
               <div>
                 <label className="text-sm font-medium">Supplier <span className="text-red-500">*</span></label>
                 <Select value={newPurchase.supplier} onValueChange={(value) => handleSelectChange("supplier", value)}>
@@ -725,7 +727,7 @@ export default function PurchaseDetail() {
               <div className="border-t pt-4">
                 <div className="flex justify-between items-center mb-2">
                     <label className="text-sm font-medium">Items</label>
-                    <Button type="button" variant="outline" size="sm" onClick={handleAddItem}>+ Add Item</Button>
+                    <Button type="button" size="sm" onClick={handleAddItem} className="bg-[#E98C81] hover:bg-[#d97a71] text-white">+ Add Item</Button>
                 </div>
                 
                 {purchaseItems.length > 0 && (
@@ -1062,7 +1064,7 @@ export default function PurchaseDetail() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={handleClearFilter}>
+            <Button variant="outline" onClick={handleClearFilter}>
               Clear Filter
             </Button>
             <Button variant="outline" onClick={() => setDateFilterOpen(false)}>

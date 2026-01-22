@@ -306,9 +306,9 @@ export default function SaleTaxRegister() {
           <div className="flex flex-col">
             <label className="text-xs opacity-0 mb-1 ml-1">_</label>
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={handleClearFilter}
-              className="h-[50px] text-gray-500 hover:text-gray-700"
+              className="h-[50px] text-gray-700 hover:bg-gray-100 border-gray-300"
             >
               Clear Filter
             </Button>
@@ -320,7 +320,7 @@ export default function SaleTaxRegister() {
             <Button
               onClick={handleExport}
               disabled={loading || rows.length === 0}
-              className="w-[239px] h-[50px] bg-[#E98C81] hover:bg-[#d87a6f] text-white rounded-full flex items-center justify-center gap-2 shadow-md"
+              className="w-[239px] h-[50px] bg-[#E98C81] hover:bg-[#d97a71] text-white rounded-full flex items-center justify-center gap-2 shadow-md"
             >
               Export <Download className="w-4 h-4" />
             </Button>

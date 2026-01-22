@@ -1021,7 +1021,7 @@ export default function ProductManagement() {
             <Button
               size="sm"
               onClick={() => handleGenerateBarcode(product)}
-              className="bg-[#fdebe3] text-[#E98C81] border border-[#E98C81] hover:bg-[#E98C81] hover:text-white transition-colors"
+              className="bg-[#E98C81] hover:bg-[#d97a71] text-white transition-colors"
               disabled={!product.itemCode}
             >
               Generate Barcode
@@ -1074,24 +1074,24 @@ export default function ProductManagement() {
       <div className="space-y-6">
         <div className="flex flex-wrap gap-4 items-center">
           <Button
-            variant="secondary"
-            className="rounded-full"
+            className="rounded-full text-white hover:opacity-90 border-0 font-bold"
+            style={{ background: "linear-gradient(180deg, #F1D6CF 0%, #EDA093 100%)" }}
             onClick={() => setAddCategoryDialogOpen(true)}
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Category
           </Button>
           <Button
-            variant="secondary"
-            className="rounded-full"
+            className="rounded-full text-white hover:opacity-90 border-0 font-bold"
+            style={{ background: "linear-gradient(180deg, #F1D6CF 0%, #EDA093 100%)" }}
             onClick={() => setAddSubCategoryDialogOpen(true)}
           >
             <Plus className="w-4 h-4 mr-2" />
             Add Sub-Category
           </Button>
           <Button
-            variant="secondary"
-            className="rounded-full"
+            className="rounded-full text-white hover:opacity-90 border-0 font-bold"
+            style={{ background: "linear-gradient(180deg, #F1D6CF 0%, #EDA093 100%)" }}
             onClick={() => {
               resetForm();
               setShowForm(true);
@@ -1101,16 +1101,16 @@ export default function ProductManagement() {
             Add Product
           </Button>
           <Button
-            variant="secondary"
-            className="rounded-full"
+            className="rounded-full text-white hover:opacity-90 border-0 font-bold"
+            style={{ background: "linear-gradient(180deg, #F1D6CF 0%, #EDA093 100%)" }}
             onClick={() => setScanBarcodeDialogOpen(true)}
           >
             <BarcodeIcon className="w-4 h-4 mr-2" />
             Scan Barcode
           </Button>
           <Button
-            variant="secondary"
-            className="rounded-full"
+            className="rounded-full text-white hover:opacity-90 border-0 font-bold"
+            style={{ background: "linear-gradient(180deg, #F1D6CF 0%, #EDA093 100%)" }}
             onClick={() => setBulkUploadDialogOpen(true)}
           >
             <Upload className="w-4 h-4 mr-2" />
@@ -1120,7 +1120,7 @@ export default function ProductManagement() {
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
             <Input
               placeholder="Search by name, brand, code, or category"
-              className="pl-10 bg-muted border-0"
+              className="pl-10 bg-[#FEEEE5] border-0 rounded-full"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
             />

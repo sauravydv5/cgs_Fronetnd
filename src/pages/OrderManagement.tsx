@@ -418,7 +418,7 @@ export default function OrderManagement() {
               </Button>
               <Button
                 size="sm"
-                className="bg-[#E98C81] hover:bg-[#dc5383] text-white"
+                className="bg-[#E98C81] hover:bg-[#d97a71] text-white"
                 onClick={() => openUpdateDialog(order)}
               >
                 Update Status
@@ -785,7 +785,7 @@ export default function OrderManagement() {
             </Button>
 
             <Button
-              className="bg-[#E98C81] hover:bg-[#f48c83]"
+              className="bg-[#E98C81] hover:bg-[#d97a71] text-white"
               onClick={handleUpdateStatus}
               disabled={updating || !statusForm.status}
             >
@@ -837,7 +837,7 @@ export default function OrderManagement() {
           </div>
           <DialogFooter>
             <Button 
-              variant="ghost" 
+              variant="outline" 
               onClick={() => {
                 setDateRange({ start: "", end: "" });
                 setAppliedDateRange({ start: "", end: "" });
@@ -850,7 +850,7 @@ export default function OrderManagement() {
               Cancel
             </Button>
             <Button 
-              className="bg-[#E98C81] hover:bg-[#f48c83]"
+              className="bg-[#E98C81] hover:bg-[#d97a71] text-white"
               onClick={handleDateRangeSearch}
             >
               Apply Filter

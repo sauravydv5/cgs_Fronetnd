@@ -717,7 +717,7 @@ export default function NewBill() {
             <div className="flex flex-wrap justify-end gap-3">
               <Button
                 onClick={() => setExitConfirmationOpen(true)}
-                className="bg-[#E57373] hover:bg-[#d75a5a] text-white rounded-full px-6 py-2 shadow-md whitespace-nowrap"
+                className="bg-[#E57373] hover:bg-[#d75a5a] text-white rounded-md px-6 py-2 shadow-md whitespace-nowrap"
               >
                 New Bill
               </Button>
@@ -875,13 +875,13 @@ export default function NewBill() {
         <div className="fixed bottom-6 right-8 flex flex-col sm:flex-row gap-4 z-50">
           <Button
             onClick={() => setOpenPreview(true)}
-            className="bg-[#E57373] hover:bg-[#d75a5a] text-white rounded-md px-8 py-2 shadow-md"
+            className="bg-[#E98C81] hover:bg-[#d97a71] text-white rounded-md px-8 py-2 shadow-md"
           >
             Preview Bill
           </Button>
           <Button
             onClick={handleGenerateBill}
-            className="bg-[#E57373] hover:bg-[#d75a5a] text-white rounded-md px-8 py-2 shadow-md"
+            className="bg-[#E98C81] hover:bg-[#d97a71] text-white rounded-md px-8 py-2 shadow-md"
           >
             Generate Bill
           </Button>

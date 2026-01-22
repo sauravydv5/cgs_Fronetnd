@@ -156,7 +156,7 @@ export default function SaleRegister() {
         style={style}
         {...attributes}
         {...listeners}
-        className="p-3 rounded-l-md cursor-grab"
+        className="p-3 text-left font-semibold text-gray-600 cursor-grab"
       >
         {column.label}
       </th>
@@ -222,9 +222,9 @@ export default function SaleRegister() {
           <div className="flex flex-col">
             <label className="text-[13px] text-transparent mb-1 select-none">_</label>
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={handleClearFilter}
-              className="h-[42px] text-gray-500 hover:text-gray-700"
+              className="h-[42px] text-gray-700 hover:bg-gray-100 border-gray-300 px-4"
             >
               Clear Filter
             </Button>
@@ -237,7 +237,7 @@ export default function SaleRegister() {
             <Button
               onClick={handleExport}
               disabled={loading || rows.length === 0}
-              className="bg-[#E98C81] hover:bg-[#d87b71] text-white rounded-md w-[160px] h-[38px] text-[14px] font-medium flex items-center justify-center gap-2 shadow-sm"
+              className="bg-[#E98C81] hover:bg-[#d97a71] text-white rounded-md w-[160px] h-[38px] text-[14px] font-medium flex items-center justify-center gap-2 shadow-sm"
             >
               Export
               <Download size={16} />
@@ -267,7 +267,7 @@ export default function SaleRegister() {
 
             const renderCell = (row: any, columnId: string) => {
               switch (columnId) {
-                case "sno": return <td className="p-3 rounded-l-md">{rows.indexOf(row) + 1}</td>;
+                case "sno": return <td className="p-3">{rows.indexOf(row) + 1}</td>;
                 case "billNo":
                   return <td className="p-3">{row.billNo}</td>;
                 case "billDate":
@@ -289,15 +289,16 @@ export default function SaleRegister() {
                 case "netAmt":
                   return <td className="p-3">₹{row.netAmt?.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
                 case "agentName":
-                  return <td className="p-3 rounded-r-md">{row.agentName}</td>;
+                  return <td className="p-3">{row.agentName}</td>;
                 default:
                   return null;
               }
             };
 
             return (
-              <table className="w-full border-separate border-spacing-y-2 text-sm whitespace-nowrap">
-                <thead className="bg-[#F6F6F6] text-gray-800 text-left">
+              <div className="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
+              <table className="w-full border-collapse text-sm whitespace-nowrap">
+                <thead className="bg-gray-50 text-gray-800 text-left">
                   <DndContext
                     collisionDetection={closestCenter}
                     onDragEnd={handleDragEnd}
@@ -306,7 +307,7 @@ export default function SaleRegister() {
                       items={columnIds}
                       strategy={horizontalListSortingStrategy}
                     >
-                      <tr>
+                      <tr className="border-b border-gray-200">
                         {columns.map((column) => (
                           <SortableHeader key={column.id} column={column} />
                         ))}
@@ -323,7 +324,7 @@ export default function SaleRegister() {
                     {currentItems.map((row) => (
                       <tr
                         key={row.id}
-                        className="bg-white shadow-sm hover:border hover:border-blue-400 transition-all"
+                        className="border-b border-gray-200 bg-white hover:bg-gray-50"
                       >
                         {columns.map((col) => renderCell(row, col.id))}
                       </tr>
@@ -331,6 +332,7 @@ export default function SaleRegister() {
                   </tbody>
                 )}
               </table>
+              </div>
             );
           })()}
         </div>

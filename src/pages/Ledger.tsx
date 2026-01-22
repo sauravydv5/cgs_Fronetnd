@@ -515,8 +515,7 @@ function Ledger() {
             <Button
               onClick={handleExport}
               disabled={loading || tableData.length === 0}
-              variant="outline"
-              className="rounded-full border border-gray-300 flex items-center gap-2 bg-[#E98C81] text-white hover:bg-[#e67a6d]"
+              className="rounded-full flex items-center gap-2 bg-[#E98C81] text-white hover:bg-[#d97a71]"
             >
               <Download className="w-4 h-4" />
               Export
@@ -790,6 +789,7 @@ function Ledger() {
                   } else {
                     setNewLedgerEntry({ ...newLedgerEntry, date: newDate });
                   }
+                  setNewLedgerEntry({ ...newLedgerEntry, date: e.target.value });
                 }}
                 onKeyDown={(e) => e.preventDefault()}
                 className="col-span-3"
@@ -901,8 +901,6 @@ function Ledger() {
                   id="dueDate"
                   type="date"
                   value={newLedgerEntry.dueDate}
-                  min={newLedgerEntry.date}
-                  max={today}
                   onChange={(e) => {
                     setNewLedgerEntry({
                       ...newLedgerEntry,

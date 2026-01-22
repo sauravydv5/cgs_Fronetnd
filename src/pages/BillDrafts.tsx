@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Trash2, FileClock, GripVertical, Search, CircleUser, User, CalendarDays, BadgeIndianRupee, Hash, Percent } from "lucide-react";
-import { getAllNewBills, updateBillPaymentStatus } from "@/adminApi/billApi";
+import { getAllNewBills, updateBillPaymentStatus, generateBill } from "@/adminApi/billApi";
 import { getAllSaleReturns, updateReturnStatus } from "@/adminApi/saleReturnApi";
 import { format } from "date-fns";
 import {
@@ -80,14 +80,14 @@ const SortableHeaderCell = ({ column }: { column: any }) => {
       style={style}
       {...attributes}
       {...listeners}
-      className={`cursor-grab active:cursor-grabbing bg-gray-50/50 text-center ${column.id === "drag" ? "w-[50px]" : ""}`}
+      className={`cursor-grab active:cursor-grabbing bg-[#FEEEE5] text-center ${column.id === "drag" ? "w-[50px]" : ""}`}
     >
       {column.label}
     </TableHead>
   );
 };
 
-const SortableRow = ({ bill, columns, onStatusChange, onClick }: { bill: any; columns: any[]; onStatusChange: (id: string, status: string) => void; onClick: (bill: any) => void }) => {
+const SortableRow = ({ bill, columns, onStatusChange, onClick, onViewBill }: { bill: any; columns: any[]; onStatusChange: (id: string, status: string) => void; onClick: (bill: any) => void; onViewBill: (bill: any) => void }) => {
   const {
     attributes,
     listeners,
@@ -128,7 +128,14 @@ const SortableRow = ({ bill, columns, onStatusChange, onClick }: { bill: any; co
         if (col.id === "type") {
           return (
             <TableCell key={col.id} className="text-center">
-              <Badge variant={bill.type === 'SR' ? 'destructive' : 'secondary'}>
+              <Badge 
+                variant={bill.type === 'SR' ? 'destructive' : 'secondary'}
+                className="cursor-pointer hover:opacity-80"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewBill(bill);
+                }}
+              >
                 {bill.type}
               </Badge>
             </TableCell>
@@ -187,6 +194,10 @@ function BillDrafts() {
   const [statusConfirmationOpen, setStatusConfirmationOpen] = useState(false);
   const [pendingStatusUpdate, setPendingStatusUpdate] = useState<{ billId: string; status: string } | null>(null);
   const [selectedBill, setSelectedBill] = useState<any | null>(null);
+  const [generatedBillHtml, setGeneratedBillHtml] = useState<string | null>(null);
+  const [showGeneratedBill, setShowGeneratedBill] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
   useEffect(() => {
     localStorage.setItem("billDraftsColumns_v3", JSON.stringify(columns));
@@ -251,6 +262,7 @@ function BillDrafts() {
           type: 'SR',
           items: ret.items || [],
           grandTotal: ret.refundAmount || 0,
+          customerId: ret.customerId?._id || ret.customerId,
         }));
 
         const combinedData = [...formattedBills, ...formattedReturns];
@@ -304,6 +316,11 @@ function BillDrafts() {
     bill.billNo.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
+  const totalPages = Math.ceil(filteredBills.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = Math.min(startIndex + itemsPerPage, filteredBills.length);
+  const currentBills = filteredBills.slice(startIndex, endIndex);
+
   const initiatePaymentStatusChange = (billId: string, status: string) => {
     setPendingStatusUpdate({ billId, status });
     setStatusConfirmationOpen(true);
@@ -335,6 +352,34 @@ function BillDrafts() {
     }
   };
 
+  const handleViewGeneratedBill = async (bill: any) => {
+    try {
+      const customerId = bill.customerId;
+      if (!customerId) {
+        toast.error("Customer ID not found for this bill.");
+        return;
+      }
+      const response = await generateBill(customerId);
+      const billDataUrl = response.url;
+      if (response.success && billDataUrl) {
+        const base64Part = billDataUrl.split(",")[1];
+        const binaryString = window.atob(base64Part);
+        const bytes = new Uint8Array(binaryString.length);
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i);
+        }
+        const decodedHtml = new TextDecoder().decode(bytes);
+        setGeneratedBillHtml(decodedHtml);
+        setShowGeneratedBill(true);
+      } else {
+        toast.error(response.message || "Failed to generate bill.");
+      }
+    } catch (error: any) {
+      console.error("Error generating bill:", error);
+      toast.error("Failed to generate bill.");
+    }
+  };
+
   return (
     <AdminLayout title="Drafts">
       <div className="space-y-6 max-w-6xl mx-auto">
@@ -353,12 +398,36 @@ function BillDrafts() {
                 type="text"
                 placeholder="Search drafts..."
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="h-10 w-[250px] rounded-md border border-input bg-background pl-9 pr-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                onChange={(e) => {
+                  setSearchQuery(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="h-10 w-[250px] rounded-full border-0 bg-[#FEEEE5] pl-9 pr-3 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               />
             </div>
           </div>
         </div>
+
+        {/* Generated Bill Modal */}
+        <Dialog open={showGeneratedBill} onOpenChange={setShowGeneratedBill}>
+          <DialogContent className="max-w-screen-lg w-[90vw] h-[90vh] flex flex-col p-2">
+            <DialogHeader className="p-4 flex-row flex justify-between items-center">
+              <DialogTitle>Generated Bill</DialogTitle>
+              <Button
+                onClick={() => {
+                  const iframe = document.getElementById("bill-iframe") as HTMLIFrameElement;
+                  iframe?.contentWindow?.print();
+                }}
+                className="bg-[#E98C81] hover:bg-[#d97a71] text-white"
+              >
+                Save & Print
+              </Button>
+            </DialogHeader>
+            {generatedBillHtml && (
+              <iframe id="bill-iframe" srcDoc={generatedBillHtml} className="w-full h-full border-0" title="Generated Bill Preview"></iframe>
+            )}
+          </DialogContent>
+        </Dialog>
 
         {/* Draft Bills Table */}
         <Card className="border-none shadow-md bg-white/50 backdrop-blur-sm">
@@ -371,7 +440,7 @@ function BillDrafts() {
               <Table>
                 <TableHeader>
                   <SortableContext items={columns} strategy={horizontalListSortingStrategy}>
-                    <TableRow className="bg-gray-50/50 hover:bg-gray-50/50">
+                    <TableRow className="bg-[#FEEEE5] hover:bg-[#FEEEE5]">
                       {columns.map((col) => (
                         <SortableHeaderCell key={col.id} column={col} />
                       ))}
@@ -381,7 +450,7 @@ function BillDrafts() {
 
                 <TableBody>
                 <SortableContext
-                  items={filteredBills}
+                  items={currentBills}
                   strategy={verticalListSortingStrategy}
                 >
                   {loading ? (
@@ -390,9 +459,16 @@ function BillDrafts() {
                         Loading drafts...
                       </TableCell>
                     </TableRow>
-                  ) : filteredBills.length > 0 ? (
-                    filteredBills.map((bill) => (
-                      <SortableRow key={bill.id} bill={bill} columns={columns} onStatusChange={initiatePaymentStatusChange} onClick={setSelectedBill} />
+                  ) : currentBills.length > 0 ? (
+                    currentBills.map((bill) => (
+                      <SortableRow 
+                        key={bill.id} 
+                        bill={bill} 
+                        columns={columns} 
+                        onStatusChange={initiatePaymentStatusChange} 
+                        onClick={setSelectedBill} 
+                        onViewBill={handleViewGeneratedBill}
+                      />
                     ))
                   ) : (
                     <TableRow>
@@ -408,6 +484,58 @@ function BillDrafts() {
                 </TableBody>
               </Table>
             </DndContext>
+
+            {!loading && filteredBills.length > itemsPerPage && (
+              <div className="flex flex-col sm:flex-row items-center justify-between px-4 py-4 border-t">
+                <div className="text-sm text-muted-foreground mb-4 sm:mb-0">
+                  Showing {startIndex + 1} to {endIndex} of {filteredBills.length} entries
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <div className="flex items-center gap-1">
+                    {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                      let pageNum;
+                      if (totalPages <= 5) {
+                        pageNum = i + 1;
+                      } else if (currentPage <= 3) {
+                        pageNum = i + 1;
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNum = totalPages - 4 + i;
+                      } else {
+                        pageNum = currentPage - 2 + i;
+                      }
+                      
+                      return (
+                        <Button
+                          key={pageNum}
+                          variant={currentPage === pageNum ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setCurrentPage(pageNum)}
+                          className={`w-8 h-8 p-0 ${currentPage === pageNum ? "bg-[#E98C81] hover:bg-[#d97a71] text-white border-none" : ""}`}
+                        >
+                          {pageNum}
+                        </Button>
+                      );
+                    })}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 

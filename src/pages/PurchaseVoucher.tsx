@@ -39,6 +39,7 @@ export default function PurchaseVoucher() {
   const [products, setProducts] = useState<any[]>([]);
   const [companies, setCompanies] = useState<string[]>([]);
   const [vouchers, setVouchers] = useState<any[]>([]);
+  const [allRecords, setAllRecords] = useState<any[]>([]);
 
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
@@ -54,6 +55,7 @@ export default function PurchaseVoucher() {
 
         const billsSet = new Set<string>();
         const suppliersMap = new Map<string, string>();
+        const records: any[] = [];
 
         // Handle Purchase Details Response
         const purchaseList = Array.isArray(purchaseRes)
@@ -62,7 +64,11 @@ export default function PurchaseVoucher() {
 
         if (Array.isArray(purchaseList)) {
           purchaseList.forEach((item: any) => {
-            if (item.billNo) billsSet.add(item.billNo);
+            const id = item.billNo || item.purchaseId;
+            if (id) {
+              billsSet.add(id);
+              records.push({ ...item, lookupId: id, source: 'purchase' });
+            }
             
             const sId = item.supplier && typeof item.supplier === 'object' ? item.supplier._id : item.supplier;
             if (sId && item.supplierName) {
@@ -78,9 +84,14 @@ export default function PurchaseVoucher() {
 
         if (Array.isArray(salesBillsList)) {
           salesBillsList.forEach((item: any) => {
-            if (item.billNo) billsSet.add(item.billNo);
+            if (item.billNo) {
+              billsSet.add(item.billNo);
+              records.push({ ...item, lookupId: item.billNo, source: 'sale' });
+            }
           });
         }
+
+        setAllRecords(records);
 
         // Handle Suppliers API Response
         const supplierList = Array.isArray(supplierRes)
@@ -106,12 +117,37 @@ export default function PurchaseVoucher() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await getAllProducts();
-        if (response?.data?.data?.rows) {
-           setProducts(response.data.data.rows);
-           const uniqueCompanies = Array.from(new Set(response.data.data.rows.map((p: any) => p.brandName).filter(Boolean))) as string[];
-           setCompanies(uniqueCompanies);
+        // @ts-ignore
+        const response = await getAllProducts({ limit: 10000 });
+        let productData: any[] = [];
+
+        if (response.data?.data?.rows && Array.isArray(response.data.data.rows)) {
+          productData = response.data.data.rows;
+        } else if (
+          response.data?.data?.products &&
+          Array.isArray(response.data.data.products)
+        ) {
+          productData = response.data.data.products;
+        } else if (response.data?.rows && Array.isArray(response.data.rows)) {
+          productData = response.data.rows;
+        } else if (
+          response.data?.products &&
+          Array.isArray(response.data.products)
+        ) {
+          productData = response.data.products;
+        } else if (response.data?.data && Array.isArray(response.data.data)) {
+          productData = response.data.data;
+        } else if (Array.isArray(response.data)) {
+          productData = response.data;
+        } else if (response.data?.result && Array.isArray(response.data.result)) {
+          productData = response.data.result;
+        } else if (response.data?.items && Array.isArray(response.data.items)) {
+          productData = response.data.items;
         }
+
+        setProducts(productData);
+        const uniqueCompanies = Array.from(new Set(productData.map((p: any) => p.brandName).filter(Boolean))) as string[];
+        setCompanies(uniqueCompanies);
       } catch (error) {
         console.error("Error fetching products", error);
       }
@@ -137,7 +173,19 @@ export default function PurchaseVoucher() {
   const handleSaveVoucher = async () => {
     setLoading(true);
     try {
-      const payload = { ...voucherData, supplier: voucherData.supplierId, items };
+      const formattedItems = items.map((item) => ({
+        ...item,
+        product: item.productId,
+        qty: item.quantity,
+      }));
+
+      if (formattedItems.some((item) => !item.product)) {
+        toast.error("Please select a product for all items.");
+        setLoading(false);
+        return;
+      }
+
+      const payload = { ...voucherData, supplier: voucherData.supplierId, items: formattedItems };
       const response = await addPurchaseVoucher(payload);
       if (response.success) {
         toast.success("Voucher added successfully!");
@@ -291,7 +339,44 @@ export default function PurchaseVoucher() {
               <select
                 className="w-full bg-white border-0 text-sm h-auto p-0 focus:ring-0 outline-none"
                 value={voucherData.billNo}
-                onChange={(e) => setVoucherData({ ...voucherData, billNo: e.target.value })}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  let newSupplierId = voucherData.supplierId;
+                  let newSupplierName = voucherData.supplierName;
+                  
+                  const record = allRecords.find(r => r.lookupId === val);
+                  if (record) {
+                    if (record.source === 'purchase') {
+                      const sId = record.supplier && typeof record.supplier === 'object' ? record.supplier._id : record.supplier;
+                      if (sId) {
+                        newSupplierId = sId;
+                        const sObj = supplierOptions.find(o => o.id === sId);
+                        newSupplierName = sObj ? sObj.name : (record.supplierName || (typeof record.supplier === 'object' ? record.supplier.name : ""));
+                      }
+                    }
+                    if (record.items && Array.isArray(record.items)) {
+                      const mappedItems = record.items.map((item: any, idx: number) => {
+                        const pId = item.productId || item.product || (typeof item.product === 'object' ? item.product._id : "") || "";
+                        const prodDetails = products.find(p => p._id === pId);
+                        return {
+                          id: `auto-${Date.now()}-${idx}`,
+                          brandName: item.brandName || item.companyName || (prodDetails?.brandName) || "",
+                          productName: item.productName || item.itemName || (prodDetails?.productName) || "",
+                          productId: pId,
+                          quantity: Number(item.qty) || Number(item.quantity) || 0,
+                          rate: Number(item.rate) || Number(item.mrp) || 0,
+                          amount: Number(item.amount) || Number(item.total) || Number(item.netAmount) || 0,
+                          discount: Number(item.discount) || Number(item.discountPercent) || 0,
+                          discountType: "percentage",
+                          gstType: "IGST",
+                          gstRate: Number(item.gst) || Number(item.gstPercent) || Number(item.tax) || 0
+                        };
+                      });
+                      if (mappedItems.length > 0) setItems(mappedItems);
+                    }
+                  }
+                  setVoucherData({ ...voucherData, billNo: val, supplierId: newSupplierId, supplierName: newSupplierName });
+                }}
               >
                 <option value="">Select Bill No</option>
                 {billOptions.map((bill, index) => (

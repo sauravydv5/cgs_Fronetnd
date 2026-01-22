@@ -386,7 +386,8 @@ export default function BillGeneration() {
             </SheetHeader>
 
             <div className="flex-1 overflow-y-auto px-6 py-6">
-              <div className="space-y-5">
+              <div className="flex flex-col justify-center min-h-full">
+                <div className="space-y-5">
                 <input
                   name="firstName"
                   value={newCustomer.firstName}
@@ -454,6 +455,7 @@ export default function BillGeneration() {
                 >
                   {isAddingCustomer ? "Adding..." : "Add"}
                 </Button>
+              </div>
               </div>
             </div>
 

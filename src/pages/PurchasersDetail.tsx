@@ -327,14 +327,14 @@ export default function PurchasersDetail() {
             <Input
               type="text"
               placeholder="Search by ID, Supplier Name, Company"
-              className="w-80 h-10 rounded-full border border-gray-300"
+              className="w-80 h-10 rounded-full bg-[#FEEEE5] border-none"
               value={searchQuery}
               onChange={(e) => {
                 setSearchQuery(e.target.value);
                 setCurrentPage(1);
               }}
             />
-            <Button className="rounded-full px-3 py-2 bg-[#ff8573] hover:bg-[#e47a69]">
+            <Button className="rounded-full px-3 py-2 bg-[#E98C81] hover:bg-[#d97a71]">
               <Search size={18} className="text-white" />
             </Button>
             <Button
@@ -347,7 +347,7 @@ export default function PurchasersDetail() {
           </div>
 
           <Button
-            className="rounded-full bg-[#ff8573] text-white hover:bg-[#e47a69] px-6"
+            className="rounded-full bg-[#E98C81] text-white hover:bg-[#d97a71] px-6"
             onClick={() => {
               setEditingSupplier(null);
               setNewSupplier({
@@ -489,7 +489,7 @@ export default function PurchasersDetail() {
                   variant={currentPage === i + 1 ? "default" : "outline"}
                   size="sm"
                   onClick={() => setCurrentPage(i + 1)}
-                  className={`h-8 w-8 p-0 text-xs ${currentPage === i + 1 ? "bg-[#ff8573] hover:bg-[#e47a69] text-white border-[#ff8573]" : ""}`}
+                  className={`h-8 w-8 p-0 text-xs ${currentPage === i + 1 ? "bg-[#E98C81] hover:bg-[#d97a71] text-white border-[#E98C81]" : ""}`}
                 >
                   {i + 1}
                 </Button>
@@ -684,7 +684,7 @@ export default function PurchasersDetail() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={handleClearFilter}>
+            <Button variant="outline" onClick={handleClearFilter}>
               Clear Filter
             </Button>
             <Button variant="outline" onClick={() => setDateFilterOpen(false)}>

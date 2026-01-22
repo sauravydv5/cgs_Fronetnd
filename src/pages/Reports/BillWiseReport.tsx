@@ -273,7 +273,7 @@ export default function BillWiseReport() {
           <Button
             onClick={handleExport}
             disabled={loading || filteredRows.length === 0}
-            className="bg-[#E98C81] hover:bg-[#d97b71] text-white rounded-full px-6 h-9 flex items-center gap-2 shadow-sm"
+            className="bg-[#E98C81] hover:bg-[#d97a71] text-white rounded-full px-6 h-9 flex items-center gap-2 shadow-sm"
           >
             <Download size={16} />
             Export
@@ -405,27 +405,27 @@ export default function BillWiseReport() {
         {/* Summary Cards */}
         <div className="flex flex-wrap justify-center gap-6 mt-6">
           <div
-            className="bg-[#F8F9FA] border rounded-2xl shadow-sm text-center py-6"
+            className="bg-[#EFF6FF] border rounded-2xl shadow-sm text-center py-6"
             style={{ width: "201px", height: "97px" }}
           >
             <p className="text-gray-600 text-sm">Total Bills</p><h2 className="text-lg font-semibold">{filteredRows.length}</h2>
           </div>
           <div
-            className="bg-[#E8F8F2] border rounded-2xl shadow-sm text-center py-6"
+            className="bg-[#F0FDF4] border rounded-2xl shadow-sm text-center py-6"
             style={{ width: "201px", height: "97px" }}
           >
             <p className="text-gray-600 text-sm">Total Amount</p>
             <h2 className="text-lg font-semibold text-[#2B8A6E]">₹{totals.billAmt.toLocaleString('en-IN')}</h2>
           </div>
           <div
-            className="bg-[#FFF1F1] border rounded-2xl shadow-sm text-center py-6"
+            className="bg-[#FAF5FF] border rounded-2xl shadow-sm text-center py-6"
             style={{ width: "201px", height: "97px" }}
           >
             <p className="text-gray-600 text-sm">Total CGST</p>
             <h2 className="text-lg font-semibold text-[#E98C81]">₹{totals.cgstOutput.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h2>
           </div>
           <div
-            className="bg-[#FFF1E9] border rounded-2xl shadow-sm text-center py-6"
+            className="bg-[#FFF7ED] border rounded-2xl shadow-sm text-center py-6"
             style={{ width: "201px", height: "97px" }}
           >
             <p className="text-gray-600 text-sm">Total SGST</p>
@@ -472,7 +472,7 @@ export default function BillWiseReport() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={handleClearFilter}>
+            <Button variant="outline" onClick={handleClearFilter}>
               Clear Filter
             </Button>
             <Button variant="outline" onClick={() => setDateFilterOpen(false)}>

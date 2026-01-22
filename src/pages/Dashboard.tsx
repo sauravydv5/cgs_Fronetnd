@@ -4,7 +4,6 @@ import { AdminLayout } from "@/components/AdminLayout";
 import {
   getDashboardData,
   getDashboardDataByDateRange,
-  getSalesChartByDateRange,
 } from "@/adminApi/dashboardApi";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,37 +69,10 @@ export default function Dashboard() {
       let cards, charts;
 
       if (startDate && endDate) {
-        const salesResponse = await getSalesChartByDateRange(
-          startDate,
-          endDate,
-        );
-        const baseResponse = await getDashboardData(); // For other cards
-
-        if (!salesResponse?.success || !baseResponse?.success) return;
-
-        const salesList = Array.isArray(salesResponse.data)
-          ? salesResponse.data
-          : [];
-        const totalSalesAmount = salesList.reduce(
-          (acc: number, item: any) => acc + (Number(item.total) || 0),
-          0,
-        );
-        const totalOrders = salesList.reduce(
-  (acc: number, item: any) => acc + (Number(item.orders) || 0),
-  0,
-);
-
-
-        // Combine data: use filtered data for sale/order cards & chart, and base data for the rest
-        cards = {
-          ...baseResponse.data.cards,
-          totalSalesAmount,
-          totalOrders,
-        };
-        charts = {
-          ...baseResponse.data.charts,
-          salesChart: salesList,
-        };
+        const response = await getDashboardDataByDateRange(startDate, endDate);
+        if (!response?.success) return;
+        cards = response.data.cards;
+        charts = response.data.charts;
       } else {
         const response = await getDashboardData();
         if (!response?.success) return;

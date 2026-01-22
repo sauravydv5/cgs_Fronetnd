@@ -11,14 +11,3 @@ export const getDashboardDataByDateRange = async (startDate: string, endDate: st
   });
   return response.data;
 };
-
-// total sales and order by date range
-export const getSalesChartByDateRange = async (
-  startDate: string,
-  endDate: string
-) => {
-  const response = await adminInstance.get("/dashboard/sales-chart", {
-    params: { startDate, endDate },
-  });
-  return response.data;
-};

@@ -242,7 +242,7 @@ export default function GSTReturn() {
           <Button
             onClick={handleExport}
             disabled={loading || data.length === 0}
-            className="flex items-center gap-2 bg-[#F46C6C] hover:bg-[#f35454] text-white text-sm px-6 py-5 h-[42px] rounded-full shadow-sm"
+            className="flex items-center gap-2 bg-[#E98C81] hover:bg-[#d97a71] text-white text-sm px-6 py-5 h-[42px] rounded-full shadow-sm"
           >
             Export <Download className="w-4 h-4" />
           </Button>

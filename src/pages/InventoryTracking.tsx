@@ -517,7 +517,7 @@ export default function InventoryTracking() {
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-6 h-4 sm:w-5 sm:h-5 text-muted-foreground" />
               <Input
                 placeholder="Search by name, brand, category or code"
-                className="pl-9 sm:pl-10 pr-4 py-2 text-sm bg-muted border-0 rounded-full shadow-sm focus:ring-2 focus:ring-[#007E66]"
+                className="pl-9 sm:pl-10 pr-4 py-2 text-sm bg-[#FEEEE5] border-0 rounded-full shadow-sm focus:ring-2 focus:ring-[#007E66]"
                 value={searchTerm}
                 onChange={handleSearchChange}
               />

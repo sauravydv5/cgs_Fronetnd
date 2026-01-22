@@ -403,10 +403,10 @@ export default function CustomerRelationship() {
     const searchLower = searchQuery.toLowerCase().trim();
     if (!searchLower) return true;
     return (
-      customer.name.toLowerCase().includes(searchLower) ||
-      customer.phone.toLowerCase().includes(searchLower) ||
-      customer.sno.toLowerCase().includes(searchLower) ||
-      customer.email.toLowerCase().includes(searchLower)
+      (customer.name || "").toLowerCase().includes(searchLower) ||
+      (String(customer.phone || "")).toLowerCase().includes(searchLower) ||
+      (customer.sno || "").toLowerCase().includes(searchLower) ||
+      (customer.email || "").toLowerCase().includes(searchLower)
     );
   });
 
@@ -425,7 +425,7 @@ export default function CustomerRelationship() {
           <div className="flex flex-wrap gap-3 items-center w-full lg:w-auto">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button className="rounded-full bg-[#fdebe3] text-gray-700 hover:bg-[#f9e5dc] text-sm sm:text-base">
+                <Button className="rounded-full bg-[#FEEEE5] text-gray-700 hover:bg-[#f9e5dc] text-sm sm:text-base">
                   Filter by Rating ▼
                 </Button>
               </DropdownMenuTrigger>
@@ -463,7 +463,7 @@ export default function CustomerRelationship() {
                   setSearchQuery(e.target.value);
                   setCurrentPage(1);
                 }}
-                className="pl-9 rounded-full bg-[#fdebe3] border-none focus-visible:ring-0 text-gray-700 placeholder:text-gray-600 w-full"
+                className="pl-9 rounded-full bg-[#FEEEE5] border-none focus-visible:ring-0 text-gray-700 placeholder:text-gray-600 w-full"
               />
             </div>
           </div>
@@ -485,7 +485,8 @@ export default function CustomerRelationship() {
                 </SheetHeader>
 
                 <div className="flex-1 overflow-y-auto px-6 py-6">
-                  <div className="space-y-5">
+                  <div className="flex flex-col justify-center min-h-full">
+                    <div className="space-y-5">
                     <Input
                       name="firstName"
                       value={newCustomer.firstName}
@@ -555,6 +556,7 @@ export default function CustomerRelationship() {
                     >
                       {isSubmitting ? "Adding..." : "Add"}
                     </Button>
+                  </div>
                   </div>
                 </div>
 
@@ -946,7 +948,7 @@ export default function CustomerRelationship() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={handleClearFilter}>
+              <Button variant="outline" onClick={handleClearFilter}>
                 Clear Filter
               </Button>
               <Button variant="outline" onClick={() => setDateFilterOpen(false)}>

@@ -75,9 +75,9 @@ export default function BillNumber() {
 
   return (
     <AdminLayout title="Report > Bill Number">
-      <div className="flex flex-col items-center justify-center gap-10">
+      <div className="p-6">
         {/* Date Section */}
-        <div className="flex flex-wrap justify-center gap-6">
+        <div className="flex flex-wrap justify-center gap-6 mb-8">
           {/* From Date */}
           <div className="flex flex-col items-center">
             <label className="text-sm text-gray-700 mb-1">From Date</label>
@@ -124,23 +124,23 @@ export default function BillNumber() {
           </div>
 
           {/* Clear Filter */}
-          <div className="flex flex-col items-center">
-            <label className="text-sm text-transparent mb-1 select-none">_</label>
+          <div className="flex flex-col">
+            <label className="text-[13px] text-transparent mb-1 select-none">_</label>
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={handleClearFilter}
-              className="h-10 text-gray-500 hover:text-gray-700"
+              className="h-10 text-gray-700 hover:bg-gray-100 border-gray-300 px-4"
             >
-              <RotateCcw size={20} />
+              Clear Filter
             </Button>
           </div>
         </div>
 
-        <div className="flex items-start justify-start mt-9 gap-2">
+        <div className="flex items-start justify-start gap-2">
           <Input
             type="text"
             placeholder="Enter Bill Number"
-            className="w-[380px] h-11 rounded-full bg-gray-100 placeholder:text-gray-500 px-5 border border-gray-300 focus:ring-0 focus:outline-none"
+            className="w-[380px] h-11 rounded-full bg-[#FEEEE5] placeholder:text-gray-500 px-5 border border-gray-300 focus:ring-0 focus:outline-none"
             value={billNumber}
             onChange={(e) => setBillNumber(e.target.value)}
             onKeyDown={(e) => {
@@ -159,7 +159,7 @@ export default function BillNumber() {
         </div>
 
         {/* Result Section */}
-        <div className="w-full max-w-4xl mt-8">
+        <div className="w-full max-w-4xl mt-8 mx-auto">
           {loading && <div className="text-center">Searching...</div>}
           {error && <div className="text-center text-red-500">{error}</div>}
           {searchResult && (

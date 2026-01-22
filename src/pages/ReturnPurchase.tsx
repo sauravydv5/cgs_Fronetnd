@@ -12,6 +12,7 @@ import {
   DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -323,7 +324,7 @@ export default function ReturnPurchase() {
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              className="pl-10 pr-4 py-2 rounded-full border-gray-300 focus:ring-0"
+              className="pl-10 pr-4 py-2 rounded-full bg-[#FEEEE5] border-0 focus:ring-0"
             />
             <Search
               className="absolute left-3 top-2.5 text-gray-400"
@@ -366,7 +367,17 @@ export default function ReturnPurchase() {
                     case "qty": return <td className="px-4 py-3">{item.qty}</td>;
                     case "reason": return <td className="px-4 py-3">{item.reason}</td>;
                     case "amount": return <td className="px-4 py-3">₹{item.amount?.toLocaleString('en-IN') || 0}</td>;
-                    case "status": return <td className="px-4 py-3 text-orange-500 font-medium">{item.status}</td>;
+                    case "status": return (
+                      <td className="px-4 py-3">
+                        <Badge className={`font-medium ${
+                          item.status === 'COMPLETED' ? 'bg-green-100 text-green-800 hover:bg-green-200' : 
+                          item.status === 'REJECTED' ? 'bg-red-100 text-red-800 hover:bg-red-200' : 
+                          'bg-yellow-100 text-yellow-800 hover:bg-yellow-200'
+                        }`}>
+                          {item.status}
+                        </Badge>
+                      </td>
+                    );
                     case "actions":
                       return (
                         <td className="py-3 px-4 flex items-center justify-center gap-2">
@@ -388,7 +399,7 @@ export default function ReturnPurchase() {
 
                 return (
                   <table className="w-full text-sm">
-                    <thead className="bg-gray-100 text-gray-700">
+                    <thead className="bg-[#FEEEE5] text-gray-700">
                       <DndContext collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
                         <SortableContext items={columnIds} strategy={horizontalListSortingStrategy}>
                           <tr>
@@ -505,7 +516,7 @@ export default function ReturnPurchase() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={handleClearFilter}>Clear Filter</Button>
+            <Button variant="outline" onClick={handleClearFilter}>Clear Filter</Button>
             <Button variant="outline" onClick={() => setDateFilterOpen(false)}>Cancel</Button>
             <Button className="bg-[#E98C81] hover:bg-[#f48c83]" onClick={handleDateRangeSearch}>Apply Filter</Button>
           </DialogFooter>

@@ -301,7 +301,7 @@ export default function BillHSNWise() {
               <Calendar size={16} />
             </Button>
 
-            <Button onClick={handleExport} disabled={loading || billData.length === 0} className="w-[239px] h-[50px] bg-[#E98C81] hover:bg-[#d87a6f] text-white rounded-full flex items-center justify-center gap-2 shadow-md">
+            <Button onClick={handleExport} disabled={loading || billData.length === 0} className="w-[239px] h-[50px] bg-[#E98C81] hover:bg-[#d97a71] text-white rounded-full flex items-center justify-center gap-2 shadow-md">
               Export <Download className="w-4 h-4" />
             </Button>
           </div>
@@ -513,7 +513,7 @@ export default function BillHSNWise() {
               </div>
             </div>
             <DialogFooter>
-              <Button variant="ghost" onClick={handleClearFilter}>Clear Filter</Button>
+              <Button variant="outline" onClick={handleClearFilter}>Clear Filter</Button>
               <Button variant="outline" onClick={() => setDateFilterOpen(false)}>Cancel</Button>
               <Button className="bg-[#E98C81] hover:bg-[#f48c83]" onClick={handleDateRangeApply}>Apply Filter</Button>
             </DialogFooter>

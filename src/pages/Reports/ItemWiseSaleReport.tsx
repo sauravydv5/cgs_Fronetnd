@@ -217,9 +217,9 @@ export default function ItemWiseSaleRegister() {
           <div className="flex flex-col">
             <label className="text-[13px] text-transparent mb-1 select-none">_</label>
             <Button
-              variant="ghost"
+              variant="outline"
               onClick={handleClearFilter}
-              className="h-[42px] text-gray-500 hover:text-gray-700"
+              className="h-[42px] text-gray-700 hover:bg-gray-100 border-gray-300"
             >
               Clear Filter
             </Button>
@@ -233,7 +233,7 @@ export default function ItemWiseSaleRegister() {
             <Button
               onClick={handleExport}
               disabled={loading || rows.length === 0}
-              className="bg-[#E98C81] hover:bg-[#d87b71] text-white rounded-md w-[160px] h-[38px] text-[14px] font-medium flex items-center justify-center gap-2 shadow-sm"
+              className="bg-[#E98C81] hover:bg-[#d97a71] text-white rounded-md w-[160px] h-[38px] text-[14px] font-medium flex items-center justify-center gap-2 shadow-sm"
             >
               Export
               <Download size={16} />
