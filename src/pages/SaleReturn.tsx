@@ -50,7 +50,7 @@ import { Calendar } from "@/components/ui/calendar";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { getAllSaleReturns, deleteSaleReturn, updateReturnStatus } from "@/adminApi/saleReturnApi";
 import { generateBill } from "@/adminApi/billApi";
 import {
@@ -90,10 +90,7 @@ const DraggableHeader = ({
 const formatDate = (dateString: string) => {
   if (!dateString) return "-";
   const date = new Date(dateString);
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
+  return isValid(date) ? format(date, "dd-MM-yyyy") : "-";
 };
 
 export default function SaleReturn() {

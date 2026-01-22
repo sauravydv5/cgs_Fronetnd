@@ -67,7 +67,7 @@ import {
   SelectItem,
   SelectTrigger,
 } from "@/components/ui/select";
-import { format } from "date-fns";
+import { format, isValid } from "date-fns";
 import { updateBillPaymentStatus, generateBill } from "@/adminApi/billApi";
 import { addSaleReturn, getAllSaleReturns } from "@/adminApi/saleReturnApi";
 
@@ -100,10 +100,7 @@ const DraggableHeader = ({
 const formatDate = (dateString: string) => {
   if (!dateString) return "-";
   const date = new Date(dateString);
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const year = date.getFullYear();
-  return `${day}-${month}-${year}`;
+  return isValid(date) ? format(date, "dd-MM-yyyy") : "-";
 };
 export default function Sale() {
   const initialColumns = [

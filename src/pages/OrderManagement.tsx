@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
+import { format, isValid } from "date-fns";
 
 import {
   arrayMove,
@@ -365,9 +366,10 @@ export default function OrderManagement() {
           </td>
         );
       case "date":
+        const date = new Date(order.createdAt);
         return (
           <td className="py-3 px-6 text-sm text-gray-700">
-            {new Date(order.createdAt).toLocaleDateString()}
+            {isValid(date) ? format(date, "dd-MM-yyyy") : "N/A"}
           </td>
         );
       case "payment":
@@ -641,7 +643,7 @@ export default function OrderManagement() {
                 <p className="text-sm text-muted-foreground">Date</p>
                 <p className="font-medium">
                   {selectedOrder?.createdAt
-                    ? new Date(selectedOrder.createdAt).toLocaleDateString()
+                    ? format(new Date(selectedOrder.createdAt), "dd-MM-yyyy")
                     : "N/A"}
                 </p>
               </div>

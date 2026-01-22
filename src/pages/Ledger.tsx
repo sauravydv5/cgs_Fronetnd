@@ -26,6 +26,7 @@ import { getAllCustomers } from "@/adminApi/customerApi";
 import { getAllSuppliers } from "@/adminApi/supplierApi";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
+import { format, isValid } from "date-fns";
 
 function Ledger() {
   const [activeTab, setActiveTab] = useState("customer");
@@ -388,10 +389,7 @@ function Ledger() {
   const formatDate = (dateString: string) => {
     if (!dateString) return "-";
     const date = new Date(dateString);
-    const day = String(date.getDate()).padStart(2, "0");
-    const month = String(date.getMonth() + 1).padStart(2, "0");
-    const year = String(date.getFullYear()).slice(-2);
-    return `${day}-${month}-${year}`;
+    return isValid(date) ? format(date, "dd-MM-yyyy") : "-";
   };
 
   // Format currency helper
@@ -900,6 +898,7 @@ function Ledger() {
                 <Input
                   id="dueDate"
                   type="date"
+                  min={today}
                   value={newLedgerEntry.dueDate}
                   onChange={(e) => {
                     setNewLedgerEntry({
