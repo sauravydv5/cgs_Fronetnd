@@ -588,6 +588,14 @@ export default function NewBill() {
         netAmount: calc.netAmount, // ✅ taxable only
       };
 
+      // Automatically add a new row if the current row is the last one
+      if (rowIndex === prev.length - 1) {
+        updated.push({
+          id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          sno: `${String(prev.length + 1).padStart(2, "0")}.`,
+        });
+      }
+
       return updated;
     });
   };

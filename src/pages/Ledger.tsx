@@ -1,6 +1,6 @@
 import { AdminLayout } from "@/components/AdminLayout";
 import React, { useState, useEffect, useCallback } from "react";
-import { Search, Download, Loader2 } from "lucide-react";
+import { Search, Download, Loader2, Calendar } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -64,6 +64,9 @@ function Ledger() {
     transactionType: "debit", // 'debit' or 'credit'
     dueDate: "",
   });
+  const [dateRange, setDateRange] = useState({ start: "", end: "" });
+  const [appliedDateRange, setAppliedDateRange] = useState({ start: "", end: "" });
+  const [dateFilterOpen, setDateFilterOpen] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -132,6 +135,11 @@ function Ledger() {
       // Add type filter if not "all"
       if (typeFilter && typeFilter !== "all") {
         params.type = typeFilter;
+      }
+
+      if (appliedDateRange.start && appliedDateRange.end) {
+        params.startDate = appliedDateRange.start;
+        params.endDate = appliedDateRange.end;
       }
 
       console.log("Fetching ledger data with params:", params);
@@ -206,7 +214,7 @@ function Ledger() {
     } finally {
       setLoading(false);
     }
-  }, [activeTab, typeFilter]);
+  }, [activeTab, typeFilter, appliedDateRange]);
 
   useEffect(() => {
     fetchLedgerData();
@@ -399,6 +407,21 @@ function Ledger() {
     return amount < 0 ? `-₹${formatted}` : `₹${formatted}`;
   };
 
+  const handleDateRangeApply = () => {
+    if (!dateRange.start || !dateRange.end) {
+      toast.error("Please select both start and end dates");
+      return;
+    }
+    setAppliedDateRange(dateRange);
+    setDateFilterOpen(false);
+  };
+
+  const handleDateRangeClear = () => {
+    setDateRange({ start: "", end: "" });
+    setAppliedDateRange({ start: "", end: "" });
+    setDateFilterOpen(false);
+  };
+
   const summary =
     activeTab === "customer"
       ? [
@@ -438,6 +461,14 @@ function Ledger() {
     activeTab === "customer" ? customerData : supplierData
   ).filter((item: any) => {
     if (typeFilter !== "all" && item.type !== typeFilter) return false;
+
+    if (appliedDateRange.start && appliedDateRange.end) {
+      const dateObj = new Date(item.date);
+      if (isValid(dateObj)) {
+        const itemDateStr = format(dateObj, "yyyy-MM-dd");
+        if (itemDateStr < appliedDateRange.start || itemDateStr > appliedDateRange.end) return false;
+      }
+    }
 
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase().trim();
@@ -539,6 +570,14 @@ function Ledger() {
                 <SelectItem value="Receipt">Receipt</SelectItem>
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              className="rounded-full border border-gray-300 h-10 px-4 flex items-center justify-center bg-[#FEEEE5] text-gray-600 hover:bg-[#FEEEE5]/80"
+              onClick={() => setDateFilterOpen(true)}
+            >
+              <Calendar className="w-4 h-4 mr-2" />
+              Filter by Date
+            </Button>
             <Button
               onClick={() => setAddLedgerDialogOpen(true)}
               disabled={loading}
@@ -925,6 +964,47 @@ function Ledger() {
             >
               Add Entry
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Date Range Filter Dialog */}
+      <Dialog open={dateFilterOpen} onOpenChange={setDateFilterOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Filter by Date</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="startDate">Start Date</Label>
+              <Input
+                id="startDate"
+                type="date"
+                value={dateRange.start}
+                max={today}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setDateRange({ ...dateRange, start: val, end: dateRange.end && val > dateRange.end ? "" : dateRange.end });
+                }}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="endDate">End Date</Label>
+              <Input
+                id="endDate"
+                type="date"
+                value={dateRange.end}
+                min={dateRange.start}
+                max={today}
+                onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                onKeyDown={(e) => e.preventDefault()}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={handleDateRangeClear}>Clear Filter</Button>
+            <Button onClick={handleDateRangeApply} className="bg-[#E98C81] hover:bg-[#e67a6d] text-white">Apply Filter</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

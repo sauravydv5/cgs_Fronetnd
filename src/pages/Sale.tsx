@@ -437,6 +437,10 @@ export default function Sale() {
   const endIndex = Math.min(startIndex + itemsPerPage, filteredBills.length);
   const currentBills = filteredBills.slice(startIndex, endIndex);
 
+  const totalSales = bills.reduce((acc, bill) => {
+    return acc + (Number(bill.totalAmount) || 0);
+  }, 0);
+
   return (
     <AdminLayout title="Bill Generation > Sale">
       <Toaster position="top-center" />
@@ -650,6 +654,23 @@ export default function Sale() {
           </TooltipProvider>
         </div>
       </div>
+
+      {/* Total Sales Summary Card */}
+      {dateRange?.from && dateRange.to && (
+        <div className="flex justify-end mb-6">
+          <div className="bg-white p-4 rounded-xl shadow-sm border border-gray-200 flex items-center gap-4 min-w-[240px]">
+            <div className="bg-green-100 p-3 rounded-full">
+              <BadgeIndianRupee className="h-6 w-6 text-green-600" />
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Total Sales</p>
+              <p className="text-xl font-bold text-gray-800">
+                ₹{totalSales.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="border border-[#d0e1f7] rounded-md overflow-x-auto relative">
