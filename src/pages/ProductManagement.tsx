@@ -107,6 +107,7 @@ export default function ProductManagement() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
+  const [lowStockProducts, setLowStockProducts] = useState<any[]>([]);
   const [addCategoryDialogOpen, setAddCategoryDialogOpen] = useState(false);
   const [addSubCategoryDialogOpen, setAddSubCategoryDialogOpen] =
     useState(false);
@@ -326,12 +327,34 @@ export default function ProductManagement() {
     }
   }, []);
 
+  const fetchLowStock = async () => {
+    try {
+      const res = await getLowStockProducts();
+      if (res?.data?.data?.products) {
+        setLowStockProducts(Array.isArray(res.data.data.products) ? res.data.data.products : []);
+      } else if (res?.data?.products) {
+        setLowStockProducts(Array.isArray(res.data.products) ? res.data.products : []);
+      } else if (Array.isArray(res?.data)) {
+        setLowStockProducts(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch low stock products:", err);
+    }
+  };
+
   useEffect(() => {
     fetchProducts();
     fetchCategories();
     fetchSubCategories();
     fetchLowStockSettings();
+    fetchLowStock();
   }, [fetchProducts, fetchCategories, fetchSubCategories, fetchLowStockSettings]);
+
+  // Helper function to get product threshold from lowStockProducts
+  const getProductThreshold = (productId: string) => {
+    const product = lowStockProducts.find((p: any) => p._id === productId);
+    return product?.lowStockThreshold ?? 10;
+  };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
@@ -999,7 +1022,7 @@ export default function ProductManagement() {
           </td>
         );
       case "stock":
-        const isLowStock = (product.stock ?? 0) <= lowStockThreshold;
+        const isLowStock = (product.stock ?? 0) <= getProductThreshold(product._id);
         return (
           <td key={columnId} className="px-6 py-4">
             <span
@@ -1416,18 +1439,11 @@ export default function ProductManagement() {
                                 <SelectValue placeholder="Select a sub-category" />
                               </SelectTrigger>
                               <SelectContent className="category-select-content max-h-[360px] overflow-y-auto">
-                                {subCategories
-                                  .filter((sub) => {
-                                    if (!formData.category) return true;
-                                    const p = sub.parent || sub.category;
-                                    const pId = p && typeof p === "object" ? p._id : p;
-                                    return pId === formData.category;
-                                  })
-                                  .map((sub) => (
-                                    <SelectItem key={sub._id} value={sub.name}>
-                                      {sub.name}
-                                    </SelectItem>
-                                  ))}
+                                {subCategories.map((sub) => (
+                                  <SelectItem key={sub._id} value={sub.name}>
+                                    {sub.name}
+                                  </SelectItem>
+                                ))}
                               </SelectContent>
                             </Select>
                           </div>

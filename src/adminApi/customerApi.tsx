@@ -8,10 +8,6 @@ export const addCustomer = (data: any) =>
 export const getAllCustomers = (params?: any) => adminInstance.get("/customers", { params });
 export const getCustomers = getAllCustomers;
 
-// Filter customers by rating
-export const getCustomersByRating = (rating: number) =>
-  adminInstance.get(`/customers/rating?rating=${rating}`);
-
 // Filter customers by date range
 export const getCustomersByDateRange = (startDate: string, endDate: string) =>
   adminInstance.get(`/customers/date-range?startDate=${startDate}&endDate=${endDate}`);
@@ -27,3 +23,17 @@ export const updateCustomerStatus = (customerId: string, isBlocked: boolean) =>
 // Update customer rating by ID
 export const updateCustomerRating = (customerId: string, rating: number) =>
   adminInstance.patch(`/customers/${customerId}/rating`, { rating });
+
+//save customer rating settings
+export const saveCustomerRatingSettings = (data: {
+  star1: number;
+  star2: number;
+  star3: number;
+  star4: number;
+  star5: number;
+}) =>
+  adminInstance.post("/customers/rating-settings", data);
+
+// Get customer rating settings
+export const getCustomerRatingSettings = () =>
+  adminInstance.get("/customers/rating-settings");

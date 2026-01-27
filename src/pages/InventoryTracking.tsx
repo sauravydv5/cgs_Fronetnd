@@ -27,11 +27,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useNavigate } from "react-router-dom";
-import { getAllProducts, updateProduct, deleteProduct, getLowStockProducts, updateLowStockSettings, updateProductStock } from "@/adminApi/productApi";
+import { getAllProducts, updateProduct, deleteProduct, getLowStockProducts, updateLowStockSettings, updateProductStock, setStockThresholds } from "@/adminApi/productApi";
 import { getAllCategories, getAllSubCategories } from "@/adminApi/categoryApi";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import Barcode from "react-barcode";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { Label } from "@/components/ui/label";
 
 export default function InventoryTracking() {
@@ -50,11 +56,14 @@ export default function InventoryTracking() {
   const [editingProduct, setEditingProduct] = useState(null);
   const [viewingProduct, setViewingProduct] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
   const [showStockUpdate, setShowStockUpdate] = useState(false);
   const [stockUpdateProduct, setStockUpdateProduct] = useState<any>(null);
   const [newStockValue, setNewStockValue] = useState("");
-  const [lowStockThreshold, setLowStockThreshold] = useState(10);
+  const [thresholdDialogOpen, setThresholdDialogOpen] = useState(false);
+  const [thresholdProduct, setThresholdProduct] = useState<any>(null);
+  const [thresholdLow, setThresholdLow] = useState("");
+  const [thresholdMax, setThresholdMax] = useState("");
+  const [viewThresholdsDialogOpen, setViewThresholdsDialogOpen] = useState(false);
   const [categories, setCategories] = useState<any[]>([]);
   const [subCategories, setSubCategories] = useState<any[]>([]);
   const [imagePreview, setImagePreview] = useState(null);
@@ -172,14 +181,12 @@ export default function InventoryTracking() {
   const fetchLowStock = async () => {
     try {
       const res = await getLowStockProducts();
-      if (res?.data?.status && res?.data?.data) {
-        const { products, settings } = res.data.data;
-        setLowStockProducts(Array.isArray(products) ? products : []);
-        if (settings) {
-          setLowStockThreshold(settings.threshold ?? 10);
-          setEmailAlert(settings.emailAlert ?? true);
-          setPushAlert(settings.pushAlert ?? false);
-        }
+      if (res?.data?.data?.products) {
+        setLowStockProducts(Array.isArray(res.data.data.products) ? res.data.data.products : []);
+      } else if (res?.data?.products) {
+        setLowStockProducts(Array.isArray(res.data.products) ? res.data.products : []);
+      } else if (Array.isArray(res?.data)) {
+        setLowStockProducts(res.data);
       }
     } catch (err) {
       console.error("Failed to fetch low stock products:", err);
@@ -197,8 +204,17 @@ export default function InventoryTracking() {
     );
   });
 
-  // Filter low stock products to only show those with stock <= 10
-  const displayableLowStockProducts = lowStockProducts.filter((p: any) => (p.stock ?? 0) <= lowStockThreshold);
+  // Filter low stock products to show those below their individual threshold
+  const displayableLowStockProducts = lowStockProducts.filter((p: any) => {
+    const threshold = p.lowStockThreshold ?? 10; // Default to 10 if not set
+    return (p.stock ?? 0) <= threshold;
+  });
+
+  // Helper function to get threshold for a product
+  const getProductThreshold = (productId: string) => {
+    const lowStockProd = lowStockProducts.find((p: any) => p._id === productId);
+    return lowStockProd?.lowStockThreshold ?? 10;
+  };
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -377,19 +393,31 @@ export default function InventoryTracking() {
     }
   };
 
-  const handleUpdateSettings = async () => {
+  const handleStockUpdateSubmit = async () => {
+    if (!stockUpdateProduct || newStockValue === "") return;
+    
+    const newStock = Number(newStockValue);
+    // Get max threshold from lowStockProducts which has the complete data
+    const productWithThreshold = lowStockProducts.find((p: any) => p._id === stockUpdateProduct._id);
+    const maxThreshold = productWithThreshold?.maxStockThreshold;
+
+    // Check if new stock exceeds max stock threshold
+    if (maxThreshold !== undefined && newStock > maxThreshold) {
+      toast.error(`Maximum limit is ${maxThreshold} units`);
+      return;
+    }
+
     try {
-      await updateLowStockSettings({ data: { 
-        threshold: lowStockThreshold,
-        emailAlert,
-        pushAlert
-      }});
-      toast.success("Low stock settings updated successfully!");
-      setShowSettings(false);
+      await updateProductStock({ id: stockUpdateProduct._id, stock: newStock });
+      toast.success("Stock updated successfully!");
+      setShowStockUpdate(false);
+      setStockUpdateProduct(null);
+      setNewStockValue("");
       fetchLowStock();
+      fetchProducts();
     } catch (err) {
-      console.error("Failed to update settings:", err);
-      toast.error("Failed to update settings.");
+      console.error("Failed to update stock:", err);
+      toast.error("Failed to update stock.");
     }
   };
 
@@ -400,7 +428,6 @@ export default function InventoryTracking() {
     try {
       await updateLowStockSettings({
         data: {
-          threshold: lowStockThreshold,
           emailAlert: type === 'email' ? value : emailAlert,
           pushAlert: type === 'push' ? value : pushAlert
         }
@@ -412,24 +439,55 @@ export default function InventoryTracking() {
     }
   };
 
-  const handleStockUpdateSubmit = async () => {
-    if (!stockUpdateProduct || newStockValue === "") return;
+  const handleStockThreshold = (product: any) => {
+    // Get the product with threshold data from lowStockProducts first, then products
+    const productWithThreshold = lowStockProducts.find((p: any) => p._id === product._id) 
+      || products.find((p: any) => p._id === product._id)
+      || product;
+    setThresholdProduct(product);
+    setThresholdLow(productWithThreshold.lowStockThreshold?.toString() || "");
+    setThresholdMax(productWithThreshold.maxStockThreshold?.toString() || "");
+    setThresholdDialogOpen(true);
+  };
+
+  // Update threshold values when dialog opens and lowStockProducts changes
+  useEffect(() => {
+    if (thresholdDialogOpen && thresholdProduct) {
+      const productWithThreshold = lowStockProducts.find((p: any) => p._id === thresholdProduct._id) 
+        || products.find((p: any) => p._id === thresholdProduct._id)
+        || thresholdProduct;
+      setThresholdLow(productWithThreshold.lowStockThreshold?.toString() || "");
+      setThresholdMax(productWithThreshold.maxStockThreshold?.toString() || "");
+    }
+  }, [thresholdDialogOpen, lowStockProducts, thresholdProduct, products]);
+
+  const saveStockThreshold = async () => {
+    if (!thresholdProduct) return;
+
     try {
-      await updateProductStock({ id: stockUpdateProduct._id, stock: Number(newStockValue) });
-      toast.success("Stock updated successfully!");
-      setShowStockUpdate(false);
-      setStockUpdateProduct(null);
-      fetchLowStock();
-      fetchProducts();
-    } catch (err) {
-      console.error("Failed to update stock:", err);
-      toast.error("Failed to update stock.");
+      await setStockThresholds({
+        id: thresholdProduct._id,
+        lowStockThreshold: thresholdLow ? parseInt(thresholdLow) : undefined,
+        maxStockThreshold: thresholdMax ? parseInt(thresholdMax) : undefined,
+      });
+      toast.success("Stock thresholds updated successfully!");
+      setThresholdDialogOpen(false);
+      setThresholdProduct(null);
+      setThresholdLow("");
+      setThresholdMax("");
+      await fetchProducts();
+      await fetchLowStock(); // Await this to ensure data is refreshed
+    } catch (error: any) {
+      toast.error(
+        error.response?.data?.message || "Failed to update thresholds."
+      );
     }
   };
 
-  const getStockColor = (stock) => {
-    if (stock <= lowStockThreshold) return "text-red-600";
-    if (stock > lowStockThreshold && stock <= 50) return "text-yellow-600";
+  const getStockColor = (stock, product) => {
+    const threshold = getProductThreshold(product._id);
+    if (stock <= threshold) return "text-red-600";
+    if (stock > threshold && stock <= 50) return "text-yellow-600";
     return "text-green-600";
   };
 
@@ -522,6 +580,18 @@ export default function InventoryTracking() {
                 onChange={handleSearchChange}
               />
             </div>
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button onClick={() => setViewThresholdsDialogOpen(true)} className="whitespace-nowrap" style={{backgroundColor: "#FEEEE5", color: "#000"}}>
+                    View All Thresholds
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Shows thresholds only for products currently in low stock.</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
 
           {/* 🖥️ Desktop Table */}
@@ -562,13 +632,17 @@ export default function InventoryTracking() {
                               }
                             </div>
                           </td>
-                          <td className="px-4 py-3 max-w-[200px] truncate">{product.productName || 'N/A'}</td>
+                          <td className="px-4 py-3 max-w-[200px] truncate">
+                            <div>
+                              <p>{product.productName || 'N/A'}</p>
+                            </div>
+                          </td>
                           <td className="px-4 py-3">{product.stock ?? 0}</td>
                           <td className="px-4 py-3">Rs. {product.mrp || 0}</td>
                           <td className="px-4 py-3">
-                            <span className={`font-semibold ${getStockColor(product.stock)}`}>
+                            <span className={`font-semibold ${getStockColor(product.stock, product)}`}>
                               {product.stock > 0
-                                ? product.stock <= lowStockThreshold
+                                ? product.stock <= getProductThreshold(product._id)
                                   ? `Low Stock (${product.stock})`
                                   : product.stock
                                 : "Out of stock"}
@@ -583,6 +657,7 @@ export default function InventoryTracking() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="bg-white shadow-md">
                                 <DropdownMenuItem onClick={() => handleEdit(product)}>Edit Product</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleStockThreshold(product)}>Stock Thresholds</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleView(product)}>View Detail</DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => handleDelete(product._id)} className="text-red-600">Delete</DropdownMenuItem>
                               </DropdownMenuContent>
@@ -686,9 +761,9 @@ export default function InventoryTracking() {
                       <p><span className="text-gray-500">Price: </span>Rs. {product.mrp || 0}</p>
                       <p>
                         <span className="text-gray-500">Stock: </span>
-                        <span className={getStockColor(product.stock)}>
+                        <span className={getStockColor(product.stock, product)}>
                           {product.stock > 0
-                            ? product.stock <= lowStockThreshold
+                            ? product.stock <= (product.lowStockThreshold ?? 10)
                               ? `Low Stock (${product.stock})`
                               : product.stock
                             : "Out of stock"}
@@ -707,13 +782,10 @@ export default function InventoryTracking() {
 
         {/* ⚙️ Right Panel */}
         <div className="xl:w-[320px] w-full bg-white rounded-xl shadow-sm border border-gray-100 p-4 md:p-5 h-fit xl:sticky xl:top-24 self-start">
-          <div className="flex items-center justify-between mb-3">
+          <div className="mb-3">
             <h3 className="text-base md:text-lg font-semibold text-gray-800">
               Low Stock Alert
             </h3>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => setShowSettings(true)}>
-              <Settings className="h-4 w-4 text-gray-500" />
-            </Button>
           </div>
 
           <div className="space-y-3 max-h-[300px] overflow-y-auto mb-4">
@@ -749,15 +821,14 @@ export default function InventoryTracking() {
               ))}
             </select>
 
-            {/* 🔔 Notification Toggles */}
-            <div className="space-y-2">
-              <div className="flex items-center justify-start gap-2">
+            <div className="space-y-3 border-t pt-4">
+              <div className="flex items-center justify-between">
+                <label className="text-xs sm:text-sm font-medium text-gray-700">Email Alert</label>
                 <Switch checked={emailAlert} onCheckedChange={(val) => handleAlertChange('email', val)} />
-                <span className="text-sm text-gray-700">Email</span>
               </div>
-              <div className="flex items-center justify-start gap-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs sm:text-sm font-medium text-gray-700">Push Alert</label>
                 <Switch checked={pushAlert} onCheckedChange={(val) => handleAlertChange('push', val)} />
-                <span className="text-sm text-gray-700">Push</span>
               </div>
             </div>
           </div>
@@ -937,36 +1008,6 @@ export default function InventoryTracking() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setViewingProduct(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Settings Dialog */}
-      <Dialog open={showSettings} onOpenChange={setShowSettings}>
-        <DialogContent className="sm:max-w-[425px]">
-          <DialogHeader>
-            <DialogTitle>Low Stock Settings</DialogTitle>
-            <DialogDescription>
-              Set the minimum stock level to trigger low stock alerts.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <label htmlFor="threshold" className="text-right text-sm font-medium col-span-2">
-                Minimum Stock Level
-              </label>
-              <Input
-                id="threshold"
-                type="number"
-                value={lowStockThreshold}
-                onChange={(e) => setLowStockThreshold(Number(e.target.value))}
-                className="col-span-2"
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowSettings(false)}>Cancel</Button>
-            <Button onClick={handleUpdateSettings}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1177,6 +1218,109 @@ export default function InventoryTracking() {
               >
                 {formLoading ? "Saving..." : "Save Changes"}
               </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Stock Threshold Modal */}
+      <Dialog open={thresholdDialogOpen} onOpenChange={setThresholdDialogOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle>Set Stock Thresholds</DialogTitle>
+            <DialogDescription>
+              {thresholdProduct?.productName && (
+                <span>
+                  Set low stock and max stock thresholds for{" "}
+                  <strong>{thresholdProduct.productName}</strong>
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid gap-2">
+              <Label htmlFor="low-threshold">Low Stock Threshold</Label>
+              <Input
+                id="low-threshold"
+                type="number"
+                min="0"
+                placeholder="Alert when stock goes below this"
+                value={thresholdLow}
+                onChange={(e) => setThresholdLow(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                You will get alerts when stock falls below this level
+              </p>
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="max-threshold">Max Stock Threshold</Label>
+              <Input
+                id="max-threshold"
+                type="number"
+                min="0"
+                placeholder="Prevent ordering when stock exceeds this"
+                value={thresholdMax}
+                onChange={(e) => setThresholdMax(e.target.value)}
+              />
+              <p className="text-xs text-muted-foreground">
+                Orders will be stopped when stock reaches or exceeds this level
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setThresholdDialogOpen(false);
+                setThresholdProduct(null);
+                setThresholdLow("");
+                setThresholdMax("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={saveStockThreshold}>Save Thresholds</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* View All Thresholds Dialog */}
+      <Dialog open={viewThresholdsDialogOpen} onOpenChange={setViewThresholdsDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>All Product Thresholds</DialogTitle>
+            <DialogDescription>View and print all product low stock and max stock thresholds</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <table className="w-full border-collapse border border-gray-300">
+              <thead>
+                <tr className="bg-gray-100">
+                  <th className="border border-gray-300 p-2 text-left">Product Name</th>
+                  <th className="border border-gray-300 p-2 text-left">Brand</th>
+                  <th className="border border-gray-300 p-2 text-center">Low Stock</th>
+                  <th className="border border-gray-300 p-2 text-center">Max Stock</th>
+                  <th className="border border-gray-300 p-2 text-center">Current Stock</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lowStockProducts.map((product: any) => (
+                  <tr key={product._id}>
+                    <td className="border border-gray-300 p-2">{product.productName}</td>
+                    <td className="border border-gray-300 p-2">{product.brandName}</td>
+                    <td className="border border-gray-300 p-2 text-center font-semibold">{product.lowStockThreshold ?? 10}</td>
+                    <td className="border border-gray-300 p-2 text-center font-semibold">{product.maxStockThreshold ?? "-"}</td>
+                    <td className="border border-gray-300 p-2 text-center">{product.stock}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <DialogFooter>
+            <Button style={{backgroundColor: "#E98C81", color: "#fff"}} onClick={() => window.print()}>
+              Print List
+            </Button>
+            <Button style={{backgroundColor: "#E98C81", color: "#fff"}} onClick={() => setViewThresholdsDialogOpen(false)}>
+              Close
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

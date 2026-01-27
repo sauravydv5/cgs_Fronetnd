@@ -7,9 +7,9 @@ import {
   deleteCustomer,
   updateCustomerStatus,
   addCustomer,
-  getCustomersByRating,
   getCustomersByDateRange,
-  updateCustomerRating,
+  saveCustomerRatingSettings,
+  getCustomerRatingSettings,
 } from "@/adminApi/customerApi";
 import { getBillsByCustomerId } from "@/adminApi/billApi";
 import { cn } from "@/lib/utils";
@@ -25,6 +25,7 @@ import {
   CalendarDays,
   Star,
   Eye,
+  Settings,
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -71,8 +72,6 @@ import {
 import { toast } from "sonner";
 import { Calendar } from "@/components/ui/calendar";
 
-
-
 export default function CustomerRelationship() {
   const navigate = useNavigate();
   const [customers, setCustomers] = useState<any[]>([]);
@@ -98,11 +97,81 @@ export default function CustomerRelationship() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [ratingThresholds, setRatingThresholds] = useState({
+    star1Min: 0,
+    star1Max: 0,
+    star2Min: 0,
+    star2Max: 0,
+    star3Min: 0,
+    star3Max: 0,
+    star4Min: 0,
+    star4Max: 0,
+    star5Min: 0,
+    star5Max: 0,
+  });
+  const [ratingsLoaded, setRatingsLoaded] = useState(false);
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [tempThresholds, setTempThresholds] = useState<any>({
+    star1Min: 0,
+    star1Max: 0,
+    star2Min: 0,
+    star2Max: 0,
+    star3Min: 0,
+    star3Max: 0,
+    star4Min: 0,
+    star4Max: 0,
+    star5Min: 0,
+    star5Max: 0,
+  });
+
+  // Fetch rating settings on mount
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const response = await getCustomerRatingSettings();
+        const data = response.data?.data || response.data;
+        if (data) {
+          setRatingThresholds({
+            star1Min: data.star1Min || 0,
+            star1Max: data.star1Max || 0,
+            star2Min: data.star2Min || 0,
+            star2Max: data.star2Max || 0,
+            star3Min: data.star3Min || 0,
+            star3Max: data.star3Max || 0,
+            star4Min: data.star4Min || 0,
+            star4Max: data.star4Max || 0,
+            star5Min: data.star5Min || 0,
+            star5Max: data.star5Max || 0,
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch rating settings:", error);
+      } finally {
+        setRatingsLoaded(true);
+      }
+    };
+    fetchSettings();
+  }, []);
 
   const itemsPerPage = 8;
 
   const todayObj = new Date();
   const today = `${todayObj.getFullYear()}-${String(todayObj.getMonth() + 1).padStart(2, "0")}-${String(todayObj.getDate()).padStart(2, "0")}`;
+
+  const getStarsBySpending = useCallback((totalSpent: number) => {
+    const check = (min: number, max: number) => {
+      if (min === 0 && max === 0) return false;
+      if (max === 0) return totalSpent >= min;
+      return totalSpent >= min && totalSpent <= max;
+    };
+
+    if (check(ratingThresholds.star5Min, ratingThresholds.star5Max)) return 5;
+    if (check(ratingThresholds.star4Min, ratingThresholds.star4Max)) return 4;
+    if (check(ratingThresholds.star3Min, ratingThresholds.star3Max)) return 3;
+    if (check(ratingThresholds.star2Min, ratingThresholds.star2Max)) return 2;
+    if (check(ratingThresholds.star1Min, ratingThresholds.star1Max)) return 1;
+    return 0;
+  }, [ratingThresholds]);
 
   const fetchCustomers = useCallback(async () => {
     try {
@@ -124,7 +193,7 @@ export default function CustomerRelationship() {
           anniversary: customer.anniversary || "N/A",
           gender: customer.gender || "N/A",
           scoreCode: customer.scoreCode || "N/A",
-          rating: customer.rating || 0,
+          rating: getStarsBySpending(customer.totalBillAmount || 0),
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
@@ -135,21 +204,20 @@ export default function CustomerRelationship() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getStarsBySpending]);
 
   const handleFilterByRating = useCallback(async (rating: number | null) => {
     try {
       setLoading(true);
       setCurrentPage(1); // Reset to the first page on new filter
-      const response =
-        rating === null
-          ? await getCustomers({ limit: 10000 })
-          : await getCustomersByRating(rating);
+
+      // Fetch all customers to filter client-side for consistency with getStarsBySpending
+      const response = await getCustomers({ limit: 10000 });
 
       if (response.data && response.data.status) {
         const customersData = response.data.data.customers || [];
         const reversedCustomers = [...customersData].reverse();
-        const formattedCustomers = reversedCustomers.map((customer, index) => ({
+        let formattedCustomers = reversedCustomers.map((customer, index) => ({
           id: customer._id,
           sno: `CUST${String(index + 1).padStart(3, "0")}`,
           name:
@@ -163,10 +231,15 @@ export default function CustomerRelationship() {
           anniversary: customer.anniversary || "N/A",
           gender: customer.gender || "N/A",
           scoreCode: customer.scoreCode || "N/A",
-          rating: customer.rating || 0,
+          rating: getStarsBySpending(customer.totalBillAmount || 0),
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
+
+        if (rating !== null) {
+          formattedCustomers = formattedCustomers.filter((c) => c.rating === rating);
+        }
+
         setCustomers(formattedCustomers);
       }
     } catch (error) {
@@ -175,7 +248,7 @@ export default function CustomerRelationship() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [getStarsBySpending]);
 
   const handleDateRangeFilter = useCallback(async () => {
     if (!dateRange.start || !dateRange.end) {
@@ -186,12 +259,15 @@ export default function CustomerRelationship() {
     try {
       setLoading(true);
       setCurrentPage(1);
-      const response = await getCustomersByDateRange(dateRange.start, dateRange.end);
+      const response = await getCustomersByDateRange(
+        dateRange.start,
+        dateRange.end,
+      );
 
       if (response.data && response.data.status) {
         const customersData = response.data.data.customers || [];
         const reversedCustomers = [...customersData].reverse();
-        const formattedCustomers = reversedCustomers.map((customer, index) => ({
+        let formattedCustomers = reversedCustomers.map((customer, index) => ({
           id: customer._id,
           sno: `CUST${String(index + 1).padStart(3, "0")}`,
           name:
@@ -201,7 +277,7 @@ export default function CustomerRelationship() {
           phone: customer.phoneNumber,
           email: customer.email,
           scoreCode: customer.scoreCode || "N/A",
-          rating: customer.rating || 0,
+          rating: getStarsBySpending(customer.totalBillAmount || 0),
           status: customer.isBlocked ? "Blocked" : "Active",
           rawData: customer,
         }));
@@ -214,7 +290,7 @@ export default function CustomerRelationship() {
     } finally {
       setLoading(false);
     }
-  }, [dateRange]);
+  }, [dateRange, getStarsBySpending]);
 
   const handleClearFilter = () => {
     setDateRange({ start: "", end: "" });
@@ -223,8 +299,10 @@ export default function CustomerRelationship() {
   };
 
   useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
+    if (ratingsLoaded) {
+      fetchCustomers();
+    }
+  }, [ratingsLoaded, fetchCustomers]);
 
   const handleDeleteCustomer = useCallback(
     async (customerId: string) => {
@@ -233,10 +311,10 @@ export default function CustomerRelationship() {
           setDeleting(true);
           const response = await deleteCustomer(customerId);
           setCustomers(
-            customers.filter((customer) => customer.id !== customerId)
+            customers.filter((customer) => customer.id !== customerId),
           );
           toast.success(
-            response.data?.message || "Customer deleted successfully!"
+            response.data?.message || "Customer deleted successfully!",
           );
         } catch (error: any) {
           console.error("Failed to delete customer:", error);
@@ -246,24 +324,8 @@ export default function CustomerRelationship() {
         }
       }
     },
-    [customers]
+    [customers],
   );
-
-  const handleRatingUpdate = async (customerId: string, newRating: number) => {
-    try {
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.id === customerId ? { ...c, rating: newRating } : c
-        )
-      );
-      await updateCustomerRating(customerId, newRating);
-      toast.success("Rating updated successfully");
-    } catch (error) {
-      console.error("Failed to update rating:", error);
-      toast.error("Failed to update rating");
-      fetchCustomers();
-    }
-  };
 
   const handleUpdateStatus = useCallback(
     async (customerId: string, shouldBlock: boolean) => {
@@ -278,15 +340,15 @@ export default function CustomerRelationship() {
               prevCustomers.map((customer) =>
                 customer.id === customerId
                   ? { ...customer, status: shouldBlock ? "Blocked" : "Active" }
-                  : customer
-              )
+                  : customer,
+              ),
             );
             toast.success(`Customer ${action}ed successfully!`);
           } else {
             toast.error(
               `Failed to ${action} customer: ${
                 response.data?.message || "Unknown error"
-              }`
+              }`,
             );
           }
         } catch (error: any) {
@@ -297,7 +359,7 @@ export default function CustomerRelationship() {
         }
       }
     },
-    []
+    [],
   );
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -353,9 +415,15 @@ export default function CustomerRelationship() {
           createdCustomer.firstName || createdCustomer.lastName
             ? `${createdCustomer.firstName} ${createdCustomer.lastName}`.trim()
             : "N/A";
-        const code = createdCustomer.customerCode || `CUST${String(customers.length + 1).padStart(3, '0')}`;
+        const code =
+          createdCustomer.customerCode ||
+          `CUST${String(customers.length + 1).padStart(3, "0")}`;
         navigate(`/bills/new-bill?id=${customerId}`, {
-          state: { openAddProductModal: true, customerName: name, customerCode: code },
+          state: {
+            openAddProductModal: true,
+            customerName: name,
+            customerCode: code,
+          },
         });
       } else {
         fetchCustomers();
@@ -365,7 +433,7 @@ export default function CustomerRelationship() {
       toast.error(
         `Failed to add customer. ${
           error.response?.data?.message || "Please try again."
-        }`
+        }`,
       );
     } finally {
       setIsSubmitting(false);
@@ -404,7 +472,9 @@ export default function CustomerRelationship() {
     if (!searchLower) return true;
     return (
       (customer.name || "").toLowerCase().includes(searchLower) ||
-      (String(customer.phone || "")).toLowerCase().includes(searchLower) ||
+      String(customer.phone || "")
+        .toLowerCase()
+        .includes(searchLower) ||
       (customer.sno || "").toLowerCase().includes(searchLower) ||
       (customer.email || "").toLowerCase().includes(searchLower)
     );
@@ -417,9 +487,17 @@ export default function CustomerRelationship() {
 
   return (
     <AdminLayout title="Customer Relationship">
-      <div
-        className="p-4 sm:p-6 space-y-6"
-      >
+      <style>{`
+        input.no-spinner::-webkit-inner-spin-button, 
+        input.no-spinner::-webkit-outer-spin-button { 
+          -webkit-appearance: none; 
+          margin: 0; 
+        }
+        input.no-spinner {
+          -moz-appearance: textfield;
+        }
+      `}</style>
+      <div className="p-4 sm:p-6 space-y-6">
         {/* Filters */}
         <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4">
           <div className="flex flex-wrap gap-3 items-center w-full lg:w-auto">
@@ -445,7 +523,29 @@ export default function CustomerRelationship() {
               </DropdownMenuContent>
             </DropdownMenu>
 
-            <button 
+            <button
+              onClick={() => {
+                setTempThresholds({
+                  star1Min: ratingThresholds.star1Min,
+                  star1Max: ratingThresholds.star1Max,
+                  star2Min: ratingThresholds.star2Min,
+                  star2Max: ratingThresholds.star2Max,
+                  star3Min: ratingThresholds.star3Min,
+                  star3Max: ratingThresholds.star3Max,
+                  star4Min: ratingThresholds.star4Min,
+                  star4Max: ratingThresholds.star4Max,
+                  star5Min: ratingThresholds.star5Min,
+                  star5Max: ratingThresholds.star5Max,
+                });
+                setSettingsDialogOpen(true);
+              }}
+              title="Customer Star Range Settings"
+              className="focus:outline-none"
+            >
+              <Settings className="w-6 h-6 text-[#f48c83] cursor-pointer hover:text-[#d16b62] transition-colors" />
+            </button>
+
+            <button
               onClick={() => setDateFilterOpen(true)}
               title="Filter by Date Range"
               className="focus:outline-none"
@@ -471,12 +571,18 @@ export default function CustomerRelationship() {
           {/* Add Customer Sheet */}
           <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
             <SheetTrigger asChild>
-              <Button className="rounded-full bg-[#E98C81] hover:bg-[#d97a71] text-white px-5 w-full sm:w-auto" onClick={() => {}}>
+              <Button
+                className="rounded-full bg-[#E98C81] hover:bg-[#d97a71] text-white px-5 w-full sm:w-auto"
+                onClick={() => {}}
+              >
                 + Add Customer
               </Button>
             </SheetTrigger>
 
-            <SheetContent side="right" className="w-full max-w-md bg-white shadow-2xl p-0">
+            <SheetContent
+              side="right"
+              className="w-full max-w-md bg-white shadow-2xl p-0"
+            >
               <div className="flex flex-col h-full">
                 <SheetHeader className="border-b px-6 py-5">
                   <SheetTitle className="text-xl font-semibold text-gray-900">
@@ -487,76 +593,76 @@ export default function CustomerRelationship() {
                 <div className="flex-1 overflow-y-auto px-6 py-6">
                   <div className="flex flex-col justify-center min-h-full">
                     <div className="space-y-5">
-                    <Input
-                      name="firstName"
-                      value={newCustomer.firstName}
-                      onChange={handleInputChange}
-                      placeholder="First Name"
-                      className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
-                    />
-                    <Input
-                      name="lastName"
-                      value={newCustomer.lastName}
-                      onChange={handleInputChange}
-                      placeholder="Last Name"
-                      className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
-                    />
-                    <Input
-                      name="phoneNumber"
-                      value={newCustomer.phoneNumber}
-                      onChange={(e) => {
-                        const value = e.target.value;
-                        // Allow only numbers and limit to 10 digits
-                        if (/^\d*$/.test(value) && value.length <= 10) {
-                          handleInputChange(e);
-                        }
-                      }}
-                      placeholder="Mobile Number"
-                      className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
-                    />
-                    <Input
-                      name="email"
-                      type="email"
-                      value={newCustomer.email}
-                      onChange={handleInputChange}
-                      placeholder="Email"
-                      className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
-                    />
-                    <Select
-                      value={newCustomer.gender}
-                      onValueChange={(value) =>
-                        setNewCustomer((prev) => ({ ...prev, gender: value }))
-                      }
-                    >
-                      <SelectTrigger className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600">
-                        <SelectValue placeholder="Select Gender" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Male">Male</SelectItem>
-                        <SelectItem value="Female">Female</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    <div className="relative">
                       <Input
-                        name="dateOfBirth"
-                        type="date"
-                        value={newCustomer.dateOfBirth}
-                        max={today}
+                        name="firstName"
+                        value={newCustomer.firstName}
                         onChange={handleInputChange}
-                        onKeyDown={(e) => e.preventDefault()}
-                        onClick={(e) => e.currentTarget.showPicker()}
-                        className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400 cursor-pointer pr-10"
+                        placeholder="First Name"
+                        className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
                       />
-                      <CalendarIcon className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                      <Input
+                        name="lastName"
+                        value={newCustomer.lastName}
+                        onChange={handleInputChange}
+                        placeholder="Last Name"
+                        className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
+                      />
+                      <Input
+                        name="phoneNumber"
+                        value={newCustomer.phoneNumber}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          // Allow only numbers and limit to 10 digits
+                          if (/^\d*$/.test(value) && value.length <= 10) {
+                            handleInputChange(e);
+                          }
+                        }}
+                        placeholder="Mobile Number"
+                        className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
+                      />
+                      <Input
+                        name="email"
+                        type="email"
+                        value={newCustomer.email}
+                        onChange={handleInputChange}
+                        placeholder="Email"
+                        className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400"
+                      />
+                      <Select
+                        value={newCustomer.gender}
+                        onValueChange={(value) =>
+                          setNewCustomer((prev) => ({ ...prev, gender: value }))
+                        }
+                      >
+                        <SelectTrigger className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600">
+                          <SelectValue placeholder="Select Gender" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="Male">Male</SelectItem>
+                          <SelectItem value="Female">Female</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="relative">
+                        <Input
+                          name="dateOfBirth"
+                          type="date"
+                          value={newCustomer.dateOfBirth}
+                          max={today}
+                          onChange={handleInputChange}
+                          onKeyDown={(e) => e.preventDefault()}
+                          onClick={(e) => e.currentTarget.showPicker()}
+                          className="w-full h-12 bg-gray-50 border-gray-200 rounded-lg text-gray-600 placeholder:text-gray-400 cursor-pointer pr-10"
+                        />
+                        <CalendarIcon className="absolute right-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400 pointer-events-none" />
+                      </div>
+                      <Button
+                        onClick={handleAddCustomer}
+                        disabled={isSubmitting}
+                        className="w-full h-12 text-white rounded-lg text-base font-medium"
+                      >
+                        {isSubmitting ? "Adding..." : "Add"}
+                      </Button>
                     </div>
-                    <Button
-                      onClick={handleAddCustomer}
-                      disabled={isSubmitting}
-                      className="w-full h-12 text-white rounded-lg text-base font-medium"
-                    >
-                      {isSubmitting ? "Adding..." : "Add"}
-                    </Button>
-                  </div>
                   </div>
                 </div>
 
@@ -590,124 +696,125 @@ export default function CustomerRelationship() {
                   </td>
                 </tr>
               ) : currentCustomers.length > 0 ? (
-                  currentCustomers.map((customer) => (
-                    <tr
-                      key={customer.id}
-                      className="border-t hover:bg-gray-50 transition text-gray-800"
-                    >
-                      <td className="px-4 sm:px-6 py-3">{customer.sno}</td>
-                      <td className="px-4 sm:px-6 py-3">
-                        <div className="flex flex-col">
-                          <span className="font-medium">{customer.name}</span>
-                          <div className="flex items-center mt-1 space-x-0.5">
-                            {Array.from({ length: 5 }).map((_, i) => (
-                              <Star
-                                key={i}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  handleRatingUpdate(customer.id, i + 1);
-                                }}
-                                className={cn(
-                                  "w-3 h-3 cursor-pointer hover:scale-125 transition-transform",
-                                  i < Math.round(customer.rating || 0) ? "text-yellow-400 fill-yellow-400" : "text-gray-300"
-                                )}
-                              />
-                            ))}
-                          </div>
+                currentCustomers.map((customer) => (
+                  <tr
+                    key={customer.id}
+                    className="border-t hover:bg-gray-50 transition text-gray-800"
+                  >
+                    <td className="px-4 sm:px-6 py-3">{customer.sno}</td>
+                    <td className="px-4 sm:px-6 py-3">
+                      <div className="flex flex-col">
+                        <span className="font-medium">{customer.name}</span>
+                        <div className="flex items-center mt-1 space-x-0.5">
+                          {Array.from({ length: 5 }).map((_, i) => (
+                            <Star
+                              key={i}
+                              className={cn(
+                                "w-3 h-3",
+                                i < Math.round(customer.rating || 0)
+                                  ? "text-yellow-400 fill-yellow-400"
+                                  : "text-gray-300",
+                              )}
+                            />
+                          ))}
                         </div>
-                      </td>
-                      <td className="px-4 sm:px-6 py-3">{customer.phone}</td>
-                      <td className="px-4 sm:px-6 py-3">
-                        {customer.scoreCode}
-                      </td>
-                      <td className="px-4 sm:px-6 py-3">
-                        <span
-                          className={`font-medium ${
-                            customer.status === "Active"
-                              ? "text-green-600"
-                              : "text-red-600"
-                          }`}
-                        >
-                          {customer.status}
-                        </span>
-                      </td>
+                      </div>
+                    </td>
+                    <td className="px-4 sm:px-6 py-3">{customer.phone}</td>
+                    <td className="px-4 sm:px-6 py-3">{customer.scoreCode}</td>
+                    <td className="px-4 sm:px-6 py-3">
+                      <span
+                        className={`font-medium ${
+                          customer.status === "Active"
+                            ? "text-green-600"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {customer.status}
+                      </span>
+                    </td>
 
-                      <td className="px-4 sm:px-6 py-3 text-center">
-                        <div className="flex justify-center gap-2 flex-wrap">
+                    <td className="px-4 sm:px-6 py-3 text-center">
+                      <div className="flex justify-center gap-2 flex-wrap">
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          className="w-8 h-8 rounded-md border-gray-300"
+                          onClick={() => {
+                            if (customer.status === "Blocked") {
+                              toast.error(
+                                "This customer is blocked. Please unblock to view bills.",
+                              );
+                              return;
+                            }
+                            navigate(`/bills/new-bill?id=${customer.id}`, {
+                              state: {
+                                customerName: customer.name,
+                                customerCode: customer.sno,
+                              },
+                            });
+                          }}
+                        >
+                          <Eye className="w-4 h-4 text-gray-600" />
+                        </Button>
+                        {customer.status === "Active" ? (
                           <Button
-                            size="icon"
-                            variant="outline"
-                            className="w-8 h-8 rounded-md border-gray-300"
-                            onClick={() => {
-                              if (customer.status === "Blocked") {
-                                toast.error("This customer is blocked. Please unblock to view bills.");
-                                return;
-                              }
-                              navigate(`/bills/new-bill?id=${customer.id}`, { state: { customerName: customer.name, customerCode: customer.sno } });
-                            }}
+                            size="sm"
+                            disabled={updatingStatus}
+                            className="bg-red-600 text-white hover:bg-red-700 px-3 py-1 rounded-md w-[72px] justify-center"
+                            onClick={() =>
+                              handleUpdateStatus(customer.id, true)
+                            }
                           >
-                            <Eye className="w-4 h-4 text-gray-600" />
+                            Block
                           </Button>
-                          {customer.status === "Active" ? (
+                        ) : (
+                          <Button
+                            size="sm"
+                            disabled={updatingStatus}
+                            className="bg-gray-800 text-white hover:bg-gray-900 px-3 py-1 rounded-md w-[72px] justify-center"
+                            onClick={() =>
+                              handleUpdateStatus(customer.id, false)
+                            }
+                          >
+                            Unblock
+                          </Button>
+                        )}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
                             <Button
-                              size="sm"
-                              disabled={updatingStatus}
-                              className="bg-red-600 text-white hover:bg-red-700 px-3 py-1 rounded-md w-[72px] justify-center"
-                              onClick={() =>
-                                handleUpdateStatus(customer.id, true)
-                              }
+                              size="icon"
+                              variant="outline"
+                              className="w-8 h-8 rounded-md border-gray-300"
                             >
-                              Block
+                              <MoreVertical className="w-4 h-4 text-gray-600" />
                             </Button>
-                          ) : (
-                            <Button
-                              size="sm"
-                              disabled={updatingStatus}
-                              className="bg-gray-800 text-white hover:bg-gray-900 px-3 py-1 rounded-md w-[72px] justify-center"
-                              onClick={() =>
-                                handleUpdateStatus(customer.id, false)
-                              }
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem
+                              onClick={() => handleViewDetails(customer)}
                             >
-                              Unblock
-                            </Button>
-                          )}
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button
-                                size="icon"
-                                variant="outline"
-                                className="w-8 h-8 rounded-md border-gray-300"
-                              >
-                                <MoreVertical className="w-4 h-4 text-gray-600" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() => handleViewDetails(customer)}
-                              >
-                                View Details
-                              </DropdownMenuItem>
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  handleDeleteCustomer(customer.id)
-                                }
-                                className="text-red-600 focus:text-red-600"
-                              >
-                                Delete
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan={6} className="text-center py-6 text-gray-500">
-                      No customers found
+                              View Details
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteCustomer(customer.id)}
+                              className="text-red-600 focus:text-red-600"
+                            >
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
                     </td>
                   </tr>
-                )}
+                ))
+              ) : (
+                <tr>
+                  <td colSpan={6} className="text-center py-6 text-gray-500">
+                    No customers found
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
@@ -728,7 +835,7 @@ export default function CustomerRelationship() {
               {Array.from({ length: totalPages }, (_, i) => i + 1)
                 .slice(
                   Math.max(0, currentPage - 2),
-                  Math.min(totalPages, currentPage + 1)
+                  Math.min(totalPages, currentPage + 1),
                 )
                 .map((page) => (
                   <Button
@@ -847,7 +954,9 @@ export default function CustomerRelationship() {
                     Bill Details
                   </h3>
                   {loadingBills ? (
-                    <div className="text-center py-4 text-gray-500">Loading bills...</div>
+                    <div className="text-center py-4 text-gray-500">
+                      Loading bills...
+                    </div>
                   ) : customerBills.length > 0 ? (
                     <div className="border rounded-lg overflow-hidden">
                       <table className="w-full text-sm text-left">
@@ -862,9 +971,13 @@ export default function CustomerRelationship() {
                         <tbody className="divide-y divide-gray-100">
                           {customerBills.map((bill) => (
                             <tr key={bill._id} className="hover:bg-gray-50">
-                              <td className="px-4 py-2 font-medium">{bill.billNo}</td>
+                              <td className="px-4 py-2 font-medium">
+                                {bill.billNo}
+                              </td>
                               <td className="px-4 py-2">
-                                {new Date(bill.billDate || bill.date || bill.createdAt).toLocaleDateString("en-GB")}
+                                {new Date(
+                                  bill.billDate || bill.date || bill.createdAt,
+                                ).toLocaleDateString("en-GB")}
                               </td>
                               <td className="px-4 py-2 text-right">
                                 ₹{bill.netAmount?.toLocaleString("en-IN")}
@@ -876,8 +989,8 @@ export default function CustomerRelationship() {
                                     bill.paymentStatus === "Paid"
                                       ? "bg-green-100 text-green-800"
                                       : bill.paymentStatus === "Unpaid"
-                                      ? "bg-red-100 text-red-800"
-                                      : "bg-yellow-100 text-yellow-800"
+                                        ? "bg-red-100 text-red-800"
+                                        : "bg-yellow-100 text-yellow-800",
                                   )}
                                 >
                                   {bill.paymentStatus || "Draft"}
@@ -889,7 +1002,9 @@ export default function CustomerRelationship() {
                       </table>
                     </div>
                   ) : (
-                    <p className="text-sm text-gray-500">No bills found for this customer.</p>
+                    <p className="text-sm text-gray-500">
+                      No bills found for this customer.
+                    </p>
                   )}
                 </div>
 
@@ -914,7 +1029,8 @@ export default function CustomerRelationship() {
             <DialogHeader>
               <DialogTitle>Filter Customers by Date</DialogTitle>
               <DialogDescription>
-                Select a start and end date to view customers registered within that range.
+                Select a start and end date to view customers registered within
+                that range.
               </DialogDescription>
             </DialogHeader>
             <div className="grid gap-4 py-4">
@@ -927,7 +1043,14 @@ export default function CustomerRelationship() {
                   max={today}
                   onChange={(e) => {
                     const val = e.target.value;
-                    setDateRange({ ...dateRange, start: val, end: dateRange.end && val > dateRange.end ? "" : dateRange.end });
+                    setDateRange({
+                      ...dateRange,
+                      start: val,
+                      end:
+                        dateRange.end && val > dateRange.end
+                          ? ""
+                          : dateRange.end,
+                    });
                   }}
                   onKeyDown={(e) => e.preventDefault()}
                   onClick={(e) => e.currentTarget.showPicker()}
@@ -941,7 +1064,9 @@ export default function CustomerRelationship() {
                   value={dateRange.end}
                   min={dateRange.start}
                   max={today}
-                  onChange={(e) => setDateRange({ ...dateRange, end: e.target.value })}
+                  onChange={(e) =>
+                    setDateRange({ ...dateRange, end: e.target.value })
+                  }
                   onKeyDown={(e) => e.preventDefault()}
                   onClick={(e) => e.currentTarget.showPicker()}
                 />
@@ -951,14 +1076,210 @@ export default function CustomerRelationship() {
               <Button variant="outline" onClick={handleClearFilter}>
                 Clear Filter
               </Button>
-              <Button variant="outline" onClick={() => setDateFilterOpen(false)}>
+              <Button
+                variant="outline"
+                onClick={() => setDateFilterOpen(false)}
+              >
                 Cancel
               </Button>
-              <Button 
+              <Button
                 className="bg-[#E98C81] hover:bg-[#f48c83]"
                 onClick={handleDateRangeFilter}
               >
                 Apply Filter
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+
+        {/* Star Rating Thresholds Settings Dialog */}
+        <Dialog open={settingsDialogOpen} onOpenChange={setSettingsDialogOpen}>
+          <DialogContent className="w-full max-w-md">
+            <DialogHeader>
+              <DialogTitle>Customer Star Ratings</DialogTitle>
+              {/* <DialogDescription>
+                Set the minimum spending amount required for each star rating.
+                Stars are assigned automatically based on customer's total
+                spending.
+              </DialogDescription> */}
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-gray-700">
+                  1 Star Range (Min - Max)
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    value={tempThresholds.star1Min}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star1Min: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    value={tempThresholds.star1Max}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star1Max: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-gray-700">
+                  2 Stars Range (Min - Max)
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    value={tempThresholds.star2Min}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star2Min: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    value={tempThresholds.star2Max}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star2Max: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-gray-700">
+                  3 Stars Range (Min - Max)
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    value={tempThresholds.star3Min}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star3Min: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    value={tempThresholds.star3Max}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star3Max: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-gray-700">
+                  4 Stars Range (Min - Max)
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    value={tempThresholds.star4Min}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star4Min: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    value={tempThresholds.star4Max}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star4Max: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2">
+                <label className="text-sm font-medium text-gray-700">
+                  5 Stars Range (Min - Max)
+                </label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    value={tempThresholds.star5Min}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star5Min: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    value={tempThresholds.star5Max}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTempThresholds({ ...tempThresholds, star5Max: val === "" ? "" : Number(val) });
+                    }}
+                    className="no-spinner rounded-lg border border-gray-300"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                variant="outline"
+                onClick={() => setSettingsDialogOpen(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-[#E98C81] hover:bg-[#f48c83]"
+                onClick={async () => {
+                  const payload = {
+                    star1Min: Number(tempThresholds.star1Min) || 0,
+                    star1Max: Number(tempThresholds.star1Max) || 0,
+                    star2Min: Number(tempThresholds.star2Min) || 0,
+                    star2Max: Number(tempThresholds.star2Max) || 0,
+                    star3Min: Number(tempThresholds.star3Min) || 0,
+                    star3Max: Number(tempThresholds.star3Max) || 0,
+                    star4Min: Number(tempThresholds.star4Min) || 0,
+                    star4Max: Number(tempThresholds.star4Max) || 0,
+                    star5Min: Number(tempThresholds.star5Min) || 0,
+                    star5Max: Number(tempThresholds.star5Max) || 0,
+                  };
+
+                  try {
+                    // @ts-ignore
+                    await saveCustomerRatingSettings(payload);
+                    setRatingThresholds(payload);
+                    setSettingsDialogOpen(false);
+                    toast.success("Star rating settings saved successfully!");
+                  } catch (error) {
+                    toast.error("Failed to save rating settings");
+                  }
+                }}
+              >
+                Save Thresholds
               </Button>
             </DialogFooter>
           </DialogContent>
