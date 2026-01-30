@@ -30,7 +30,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Edit, Trash2, Barcode } from "lucide-react";
+import { Search, Edit, Trash2, Barcode, RotateCcw } from "lucide-react";
 import React, { useState, useEffect } from "react"; // React is imported here
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
@@ -49,6 +49,7 @@ import {
   updateBillPaymentStatus,
 } from "@/adminApi/billApi"; // Assuming the api is in billApi
 import { getAllProducts } from "@/adminApi/productApi";
+import { addSaleReturn } from "@/adminApi/saleReturnApi";
 import { toast } from "sonner";
 
 const updateBill = async ({ id, data }: { id: string; data: any }) => {
@@ -78,7 +79,8 @@ export default function NewBill() {
   >(null);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [newBillItems, setNewBillItems] = useState<any[]>([]);
+  const [saleItems, setSaleItems] = useState<any[]>([]);
+  const [returnItems, setReturnItems] = useState<any[]>([]);
   const [generatedBillHtml, setGeneratedBillHtml] = useState<string | null>(
     null,
   );
@@ -242,7 +244,8 @@ export default function NewBill() {
 
     if (location.state?.openAddProductModal) {
       setOpenAddProductModal(true);
-      setNewBillItems([{ id: `new-item-${Date.now()}`, sno: "01." }]);
+      setSaleItems([{ id: `new-item-${Date.now()}`, sno: "01." }]);
+      setReturnItems([]);
     }
 
     fetchBills();
@@ -326,7 +329,10 @@ export default function NewBill() {
   };
 
   const handleSaveBill = async () => {
-    const billItems = newBillItems
+    setIsSaving(true);
+
+    // Prepare Sale Items
+    const saleBillItems = saleItems
       .map((row) => ({
         productId: row.productId,
         product: row.productId,
@@ -344,84 +350,130 @@ export default function NewBill() {
         // The backend should calculate other fields like taxableAmount, gst, total etc.
       }))
       .filter((item) => item.itemCode && item.qty > 0);
+    
+    // Prepare Return Items
+    const returnPayloadItems = returnItems
+      .map((row) => {
+        const qty = Number(row.qty) || 0;
+        const rate = Number(row.mrp) || 0;
+        const cd = Number(row.cd) || 0;
+        const tax = Number(row.tax) || 0;
 
-    if (billItems.some((item) => !item.productId)) {
+        const gross = rate * qty;
+        const discountAmount = (gross * cd) / 100;
+        const taxable = gross - discountAmount;
+        const gstAmount = (taxable * tax) / 100;
+        const total = taxable + gstAmount;
+
+        return {
+          productId: row.productId,
+          product: row.productId,
+          itemCode: row.itemCode,
+          itemName: row.itemName,
+          companyName: row.companyName,
+          hsnCode: row.hsnCode,
+          packing: row.packing,
+          batch: row.lot === "N/A" ? "" : row.lot || "",
+          qty: qty,
+          rate: rate,
+          mrp: rate,
+          discountPercent: cd,
+          discount: cd,
+          gstPercent: tax,
+          discountAmount: discountAmount,
+          taxableAmount: taxable,
+          taxAmount: gstAmount,
+          total: total,
+          amount: total,
+          finalAmount: total,
+        };
+      })
+      .filter((item) => item.itemCode && item.qty > 0);
+
+    // Validations
+    if (
+      [...saleBillItems, ...returnPayloadItems].some((item) => !item.productId)
+    ) {
       toast.error(
         "Some items are missing Product ID. Please remove and re-add them.",
       );
+      setIsSaving(false);
       return;
     }
 
-    if (billItems.length === 0) {
-      toast.error("Please add at least one product with a quantity.");
+    if (saleBillItems.length === 0 && returnPayloadItems.length === 0) {
+      toast.error("Please add at least one item.");
+      setIsSaving(false);
       return;
     }
 
-    let currentBillNo;
-    if (editingBillId) {
-      const existingBill = rows.find((r) => r.billId === editingBillId);
-      if (existingBill) {
-        currentBillNo = existingBill.billNo;
-      }
-    }
-
-    // We include customerId here so the bill is linked to the correct customer
-    const payload = {
-      customerId,
-      billNo: currentBillNo,
-      items: billItems,
-      paymentMode: "Cash", // Or get this from a form field
-      notes: "Bill created from admin panel.",
-    };
-
-    console.log("Saving Bill Payload (Check for customerId):", payload);
-
-    setIsSaving(true);
     try {
-      let responseData;
-      if (editingBillId) {
-        const res = await updateBill({ id: editingBillId, data: payload });
-        responseData = res.data;
-        toast.success("Bill updated successfully!");
-      } else {
-        responseData = await addNewBill(payload);
-        toast.success("Bill saved successfully!");
-      }
-      setOpenAddProductModal(false);
-      setOpenPreview(false);
-      setEditingBillId(null);
+      let billIdForReturn = editingBillId;
+      let billNoForReturn = null;
 
-      if (customerId) {
-        await new Promise((resolve) => setTimeout(resolve, 500));
-        await fetchBills();
-      } else {
-        const savedBill =
-          responseData?.data || responseData?.bill || responseData;
-        if (savedBill && Array.isArray(savedBill.items)) {
-          const flattenedRows = savedBill.items.map(
-            (item: any, index: number) => {
-              const sno = index + 1;
-              return {
-                ...savedBill,
-                ...item,
-                billId: savedBill._id,
-                uniqueId: item._id || `${savedBill._id}-${index}`,
-                adItemCode: `AD${String(sno).padStart(4, "0")}`,
-                sno: `${String(sno).padStart(2, "0")}.`,
-                lot: item.batch || "N/A",
-                cd: item.discountPercent,
-                netAmount: item.taxableAmount, // ✅ correct NET
-                tax: item.gstPercent,
-              };
-            },
-          );
-          setRows(flattenedRows);
+      if (editingBillId) {
+        const existingBill = rows.find((r) => r.billId === editingBillId);
+        if (existingBill) {
+          billNoForReturn = existingBill.billNo;
         }
       }
+
+      // Step 1: Save or Update the Sales Bill (SL part)
+      if (saleBillItems.length > 0) {
+        const salePayload = {
+          customerId,
+          billNo: billNoForReturn,
+          items: saleBillItems,
+          paymentMode: "Cash",
+          notes: "Bill from NewBill page",
+        };
+
+        if (editingBillId) {
+          await updateBill({ id: editingBillId, data: salePayload });
+        } else {
+          const response = await addNewBill(salePayload);
+          const newBill = response?.bill || response?.data || response;
+          if (!newBill?._id) {
+            throw new Error("Failed to create sales bill.");
+          }
+          billIdForReturn = newBill._id;
+        }
+      } else if (editingBillId && returnPayloadItems.length > 0) {
+        // If editing and only returns are present, update original bill with empty items
+        await updateBill({ id: editingBillId, data: { items: [] } });
+      }
+
+      // Step 2: Create the Sales Return (SR part)
+      if (returnPayloadItems.length > 0) {
+        if (!billIdForReturn) {
+          toast.error(
+            "A sales return must be associated with a sales bill. Add at least one sale item or edit an existing bill.",
+          );
+          setIsSaving(false);
+          return;
+        }
+
+        const totalRefundAmount = calculateTotals(returnItems).total;
+
+        const returnApiPayload = {
+          billId: billIdForReturn,
+          customerId,
+          reason: "Returned during billing",
+          refundAmount: totalRefundAmount,
+          items: returnPayloadItems,
+        };
+
+        await addSaleReturn(returnApiPayload);
+        toast.success("Sales Return created successfully!");
+      }
+
+      toast.success("Bill operations completed successfully!");
+      setOpenAddProductModal(false);
+      setEditingBillId(null);
+      await fetchBills();
     } catch (error: any) {
       const errorMessage =
-        error.response?.data?.message ||
-        "Failed to save the bill. Please try again.";
+        error.response?.data?.message || "An error occurred during saving.";
       toast.error(errorMessage);
       console.error("Error saving bill:", error);
     } finally {
@@ -438,7 +490,8 @@ export default function NewBill() {
     }
     // If there is a customer, open the modal to add a new bill for them.
     setEditingBillId(null);
-    setNewBillItems([{ id: `new-item-${Date.now()}`, sno: "01." }]); // Start with one fresh row for the new bill
+    setSaleItems([{ id: `new-item-${Date.now()}`, sno: "01." }]); // Start with one fresh row for the new bill
+    setReturnItems([]);
     setOpenAddProductModal(true);
   };
 
@@ -482,7 +535,10 @@ export default function NewBill() {
     // Filter all rows that belong to this bill to populate the modal
     const billItems = rows.filter((r) => r.billId === billId);
 
-    const formattedItems = billItems.map((item, index) => {
+    const sales: any[] = [];
+    const returns: any[] = [];
+
+    billItems.forEach((item, index) => {
       const pId =
         (item.productId &&
           (typeof item.productId === "object"
@@ -491,7 +547,7 @@ export default function NewBill() {
         (item.product &&
           (typeof item.product === "object" ? item.product._id : item.product));
 
-      return {
+      const formatted = {
         ...item,
         id: item.uniqueId || `edit-item-${index}`,
         sno: `${String(index + 1).padStart(2, "0")}.`,
@@ -511,10 +567,18 @@ export default function NewBill() {
         tax: item.tax,
         netAmount: item.taxableAmount,
       };
+
+      if (Number(item.qty) < 0) {
+        formatted.qty = Math.abs(Number(item.qty));
+        returns.push(formatted);
+      } else {
+        sales.push(formatted);
+      }
     });
 
     setEditingBillId(billId);
-    setNewBillItems(formattedItems);
+    setSaleItems(sales);
+    setReturnItems(returns);
     setOpenAddProductModal(true);
   };
 
@@ -557,8 +621,8 @@ export default function NewBill() {
     };
   };
 
-  const handleNewBillProductSelect = (product: any, rowIndex: number) => {
-    setNewBillItems((prev) => {
+  const handleProductSelect = (product: any, rowIndex: number) => {
+    setSaleItems((prev) => {
       const updated = [...prev];
       const row = updated[rowIndex];
       const mrp = Number(product.mrp) || 0;
@@ -600,12 +664,14 @@ export default function NewBill() {
     });
   };
 
-  const handleNewBillItemChange = (
+  const handleItemChange = (
     index: number,
     field: string,
     value: string,
+    type: 'sale' | 'return'
   ) => {
-    setNewBillItems((currentRows) => {
+    const setItems = type === 'sale' ? setSaleItems : setReturnItems;
+    setItems((currentRows) => {
       const newRows = [...currentRows];
       const updatedRow = {
         ...newRows[index],
@@ -629,20 +695,148 @@ export default function NewBill() {
     });
   };
 
-  const handleRemoveNewBillItem = (idToRemove: string) => {
-    setNewBillItems((prevItems) =>
+  const handleRemoveItem = (idToRemove: string, type: 'sale' | 'return') => {
+    const setItems = type === 'sale' ? setSaleItems : setReturnItems;
+    setItems((prevItems) =>
       prevItems.filter((item) => item.id !== idToRemove),
     );
   };
 
-  const handleAddRowToNewBill = () => {
-    setNewBillItems((prevItems) => [
+  const handleAddSaleRow = () => {
+    setSaleItems((prevItems) => [
       ...prevItems,
       {
         id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         sno: `0${prevItems.length + 1}.`,
       },
     ]);
+  };
+
+  const handleReturnItem = (item: any) => {
+    const currentQty = Number(item.qty) || 0;
+    if (currentQty <= 0) return;
+
+    let returnQty = 1;
+    if (currentQty > 1) {
+      const val = window.prompt(
+        `Enter quantity to return (Max: ${currentQty})`,
+        "1",
+      );
+      if (val === null) return;
+      returnQty = Number(val);
+      if (isNaN(returnQty) || returnQty <= 0 || returnQty > currentQty) {
+        toast.error("Invalid quantity");
+        return;
+      }
+    }
+
+    const returnItemData = {
+      productId: item.productId,
+      itemCode: item.itemCode,
+      itemName: item.itemName,
+      companyName: item.companyName,
+      hsnCode: item.hsnCode,
+      packing: item.packing,
+      lot: item.lot,
+      mrp: item.mrp,
+      cd: item.cd,
+      tax: item.tax,
+      adItemCode: item.adItemCode,
+    };
+
+    if (returnQty === currentQty) {
+      setSaleItems((prev) => prev.filter((i) => i.id !== item.id));
+      setReturnItems((prev) => [
+        ...prev,
+        {
+          ...returnItemData,
+          id: `sr-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          qty: returnQty,
+          netAmount: item.netAmount,
+        },
+      ]);
+      toast.success("Item moved to Return list");
+    } else {
+      // Update sale item quantity
+      setSaleItems((prev) =>
+        prev.map((i) => {
+          if (i.id === item.id) {
+            const newQty = currentQty - returnQty;
+            const calc = calculateRowAmount({ ...i, qty: newQty });
+            return { ...i, qty: newQty, netAmount: calc.netAmount };
+          }
+          return i;
+        }),
+      );
+      // Add new return item
+      setReturnItems((prev) => {
+        const calc = calculateRowAmount({ ...returnItemData, qty: returnQty });
+        return [
+          ...prev,
+          {
+            ...returnItemData,
+            id: `sr-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            qty: returnQty,
+            netAmount: calc.netAmount,
+          },
+        ];
+      });
+      toast.success(`Returned ${returnQty} items`);
+    }
+  };
+
+  const handleUndoReturn = (itemToMoveBack: any) => {
+    // Remove from returnItems
+    setReturnItems((prev) => prev.filter((i) => i.id !== itemToMoveBack.id));
+
+    // Check if an item with the same product ID already exists in saleItems
+    const existingSaleItemIndex = saleItems.findIndex(
+      (i) => i.productId === itemToMoveBack.productId,
+    );
+
+    if (existingSaleItemIndex > -1) {
+      // If it exists, update its quantity
+      setSaleItems((prev) =>
+        prev.map((item, index) => {
+          if (index === existingSaleItemIndex) {
+            const newQty =
+              (Number(item.qty) || 0) + (Number(itemToMoveBack.qty) || 0);
+            const calc = calculateRowAmount({ ...item, qty: newQty });
+            return { ...item, qty: newQty, netAmount: calc.netAmount };
+          }
+          return item;
+        }),
+      );
+    } else {
+      // If it does not exist, add it back
+      setSaleItems((prev) => [...prev, itemToMoveBack]);
+    }
+
+    toast.info("Item moved back to Sale list");
+  };
+
+  const calculateTotals = (items: any[]) => {
+    return items.reduce(
+      (acc, item) => {
+        const mrp = Number(item.mrp) || 0;
+        const qty = Number(item.qty) || 0;
+        const cd = Number(item.cd) || 0;
+        const tax = Number(item.tax) || 0;
+
+        const gross = mrp * qty;
+        const discount = (gross * cd) / 100;
+        const taxable = gross - discount;
+        const gst = (taxable * tax) / 100;
+
+        acc.amount += gross;
+        acc.discount += discount;
+        acc.tax += gst;
+        acc.total += taxable + gst;
+
+        return acc;
+      },
+      { amount: 0, discount: 0, tax: 0, total: 0 }
+    );
   };
 
   const initiatePaymentStatusChange = (billId: string, status: string) => {
@@ -926,7 +1120,18 @@ export default function NewBill() {
 
       {/* === Add Product Modal (Editable) === */}
       <Dialog open={openAddProductModal} onOpenChange={setOpenAddProductModal}>
-        <DialogContent className="max-w-screen-2xl w-[95vw] bg-white rounded-3xl p-5 sm:p-10 shadow-lg border-none overflow-hidden">
+        <DialogContent className="max-w-screen-2xl w-[95vw] max-h-[95vh] bg-white rounded-3xl p-5 sm:p-10 shadow-lg border-none overflow-y-auto">
+          {(() => {
+            const sl = calculateTotals(saleItems);
+            const sr = calculateTotals(returnItems);
+            // The net payable amount is the total of items being sold minus the total of items being returned.
+            // The user's issue was that when an item was moved from sale to return in a *new* bill,
+            // the sale total decreased, and the return total increased, leading to an incorrect
+            // final calculation (e.g., Total A - Total B instead of just Total A).
+            // By calculating a gross total first, we can show a more logical summary.
+            const grossTotal = sl.total + sr.total;
+            const netPayable = grossTotal - sr.total;
+            return (
           <div className="overflow-x-auto">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center text-[#1B2A38] text-base sm:text-lg mb-6 gap-3">
               <p>
@@ -939,10 +1144,7 @@ export default function NewBill() {
               </p>
             </div>
 
-            <h2 className="text-center font-semibold text-[#1B2A38] mb-6">
-              Enter your Product details
-            </h2>
-
+            <h3 className="font-semibold mb-2">( SL )</h3>
             <table className="min-w-full text-sm text-left text-[#1B2A38] border border-gray-200 rounded-md">
               <thead className="sticky top-0 bg-[#FDF5F5] z-10">
                 <tr className="border-b border-gray-300 bg-[#FDF5F5]">
@@ -969,7 +1171,7 @@ export default function NewBill() {
                 </tr>
               </thead>
               <tbody>
-                {newBillItems.map((r, i) => (
+                {saleItems.map((r, i) => (
                   <tr
                     key={r.id}
                     className="bg-[#F9FAFB] hover:bg-[#F5F5F5] transition"
@@ -1016,7 +1218,7 @@ export default function NewBill() {
                                   key={product._id}
                                   value={product.itemCode}
                                   onSelect={() => {
-                                    handleNewBillProductSelect(product, i);
+                                    handleProductSelect(product, i);
                                     setOpenPopoverIndex(null);
                                   }}
                                 >
@@ -1056,7 +1258,7 @@ export default function NewBill() {
                                   key={product._id}
                                   value={product.productName}
                                   onSelect={() => {
-                                    handleNewBillProductSelect(product, i);
+                                    handleProductSelect(product, i);
                                     setOpenNamePopoverIndex(null);
                                   }}
                                 >
@@ -1072,10 +1274,11 @@ export default function NewBill() {
                       <Input
                         value={r.companyName || ""}
                         onChange={(e) =>
-                          handleNewBillItemChange(
+                          handleItemChange(
                             i,
                             "companyName",
                             e.target.value,
+                            'sale'
                           )
                         }
                         placeholder="Company"
@@ -1086,7 +1289,7 @@ export default function NewBill() {
                       <Input
                         value={r.hsnCode || ""}
                         onChange={(e) =>
-                          handleNewBillItemChange(i, "hsnCode", e.target.value)
+                          handleItemChange(i, "hsnCode", e.target.value, 'sale')
                         }
                         placeholder="HSN"
                         className="bg-white"
@@ -1096,7 +1299,7 @@ export default function NewBill() {
                       <Input
                         value={r.packing || ""}
                         onChange={(e) =>
-                          handleNewBillItemChange(i, "packing", e.target.value)
+                          handleItemChange(i, "packing", e.target.value, 'sale')
                         }
                         placeholder="Packing"
                         className="bg-white"
@@ -1106,7 +1309,7 @@ export default function NewBill() {
                       <Input
                         value={r.lot || ""}
                         onChange={(e) =>
-                          handleNewBillItemChange(i, "lot", e.target.value)
+                          handleItemChange(i, "lot", e.target.value, 'sale')
                         }
                         placeholder="Lot"
                         className="bg-white"
@@ -1116,7 +1319,7 @@ export default function NewBill() {
                       <Input
                         value={r.mrp || ""}
                         onChange={(e) =>
-                          handleNewBillItemChange(i, "mrp", e.target.value)
+                          handleItemChange(i, "mrp", e.target.value, 'sale')
                         }
                         placeholder="MRP"
                         type="number"
@@ -1128,7 +1331,7 @@ export default function NewBill() {
                       <Input
                         value={r.qty || ""}
                         onChange={(e) =>
-                          handleNewBillItemChange(i, "qty", e.target.value)
+                          handleItemChange(i, "qty", e.target.value, 'sale')
                         }
                         placeholder="Qty"
                         type="number"
@@ -1140,7 +1343,7 @@ export default function NewBill() {
                       <Input
                         value={r.cd || ""}
                         onChange={(e) =>
-                          handleNewBillItemChange(i, "cd", e.target.value)
+                          handleItemChange(i, "cd", e.target.value, 'sale')
                         }
                         placeholder="C.D"
                         type="number"
@@ -1161,7 +1364,7 @@ export default function NewBill() {
                       <Input
                         value={r.tax || ""}
                         onChange={(e) =>
-                          handleNewBillItemChange(i, "tax", e.target.value)
+                          handleItemChange(i, "tax", e.target.value, 'sale')
                         }
                         placeholder="Tax"
                         type="number"
@@ -1169,10 +1372,17 @@ export default function NewBill() {
                         min={0}
                       />
                     </td>
-                    <td className="p-2 text-center">
+                    <td className="p-2 text-center flex items-center justify-center gap-2">
+                      <RotateCcw
+                        size={16}
+                        className="text-blue-600 cursor-pointer hover:scale-110 transition"
+                        title="Return Item"
+                        onClick={() => handleReturnItem(r)}
+                      />
                       <Trash2
+                        size={16}
                         className="cursor-pointer text-[#E57373] hover:scale-110 transition"
-                        onClick={() => handleRemoveNewBillItem(r.id)}
+                        onClick={() => handleRemoveItem(r.id, 'sale')}
                       />
                     </td>
                   </tr>
@@ -1180,9 +1390,59 @@ export default function NewBill() {
               </tbody>
             </table>
 
+            {returnItems.length > 0 && (
+              <>
+                <h3 className="font-semibold mt-8 mb-2">( SR )</h3>
+                <table className="min-w-full text-sm text-left text-[#1B2A38] border border-gray-200 rounded-md">
+                  <thead className="sticky top-0 bg-[#FDF5F5] z-10">
+                    <tr className="border-b border-gray-300 bg-[#FDF5F5]">
+                      {[
+                        "SNO.", "Ad. item code", "ITEM CODE", "ITEM NAME", "COMPANY NAME",
+                        "HSN CODE", "PACKING", "LOT", "MRP", "QTY", "C.D", "NET AMOUNT", "TAX", "ACTION"
+                      ].map((head, i) => (
+                        <th key={i} className="py-2 px-3 whitespace-nowrap">{head}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {returnItems.map((r, i) => (
+                      <tr key={r.id} className="bg-[#F9FAFB] hover:bg-[#F5F5F5] transition">
+                        <td className="p-2"><Input value={r.sno || `0${i + 1}.`} className="bg-white" readOnly /></td>
+                        <td className="p-2"><Input value={r.adItemCode || `AD000${i + 1}`} className="bg-white" readOnly /></td>
+                        <td className="p-2"><Input value={r.itemCode || ""} className="bg-white" readOnly /></td>
+                        <td className="p-2"><Input value={r.itemName || ""} className="bg-white" readOnly /></td>
+                        <td className="p-2"><Input value={r.companyName || ""} className="bg-white" readOnly /></td>
+                        <td className="p-2"><Input value={r.hsnCode || ""} className="bg-white" readOnly /></td>
+                        <td className="p-2"><Input value={r.packing || ""} className="bg-white" readOnly /></td>
+                        <td className="p-2"><Input value={r.lot || ""} onChange={(e) => handleItemChange(i, "lot", e.target.value, 'return')} className="bg-white" /></td>
+                        <td className="p-2"><Input value={r.mrp || ""} onChange={(e) => handleItemChange(i, "mrp", e.target.value, 'return')} type="number" className="bg-white" /></td>
+                        <td className="p-2"><Input value={r.qty || ""} onChange={(e) => handleItemChange(i, "qty", e.target.value, 'return')} type="number" className="bg-white" /></td>
+                        <td className="p-2"><Input value={r.cd || ""} onChange={(e) => handleItemChange(i, "cd", e.target.value, 'return')} type="number" className="bg-white" /></td>
+                        <td className="p-2"><Input value={r.netAmount || ""} readOnly className="bg-white" /></td>
+                        <td className="p-2"><Input value={r.tax || ""} onChange={(e) => handleItemChange(i, "tax", e.target.value, 'return')} type="number" className="bg-white" /></td>
+                        <td className="p-2 text-center flex items-center justify-center gap-2">
+                          <RotateCcw
+                            size={16}
+                            className="text-green-600 cursor-pointer hover:scale-110 transition"
+                            title="Move back to Sale"
+                            onClick={() => handleUndoReturn(r)}
+                          />
+                          <Trash2
+                            size={16}
+                            className="cursor-pointer text-[#E57373] hover:scale-110 transition"
+                            onClick={() => handleRemoveItem(r.id, 'return')}
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+
             <div className="flex justify-center items-center mt-8 gap-4">
               <Button
-                onClick={handleAddRowToNewBill}
+                onClick={handleAddSaleRow}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full px-6 py-2 font-medium shadow-sm"
               >
                 Add Row
@@ -1199,7 +1459,62 @@ export default function NewBill() {
                     : "Continue"}
               </Button>
             </div>
+
+            <div className="mt-6 w-80 ml-auto text-sm border border-gray-200">
+              <div className="flex justify-between p-2">
+                <span>AMOUNT:</span>
+                <span>₹{(sl.amount + sr.amount).toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between p-2">
+                <span>DIS:</span>
+                <span>₹{(sl.discount + sr.discount).toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between p-2">
+                <span>AMT AFT DIS:</span>
+                <span>₹{(sl.amount + sr.amount - (sl.discount + sr.discount)).toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between p-2">
+                <span>GST:</span>
+                <span>₹{(sl.tax + sr.tax).toFixed(2)}</span>
+              </div>
+
+              <div className="flex justify-between p-2 font-semibold">
+                <span>Total Sale Value:</span>
+                <span>₹{grossTotal.toFixed(2)}</span>
+              </div>
+
+              {sr.total > 0 && (
+                <>
+                  <div className={`flex justify-between p-2 ${netPayable < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span>Return Discount:</span>
+                    <span>- ₹{sr.discount.toFixed(2)}</span>
+                  </div>
+
+                  <div className={`flex justify-between p-2 ${netPayable < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span>Return GST:</span>
+                    <span>- ₹{sr.tax.toFixed(2)}</span>
+                  </div>
+
+                  <div className={`flex justify-between p-2 ${netPayable < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                    <span>Return Value:</span>
+                    <span>- ₹{sr.total.toFixed(2)}</span>
+                  </div>
+                </>
+              )}
+
+              <div className="flex justify-between p-2 font-bold border-t">
+                <span>{netPayable >= 0 ? "NET PAYABLE:" : "REFUND AMOUNT:"}</span>
+                <span className={netPayable < 0 ? "text-green-600" : ""}>
+                  ₹{Math.abs(netPayable).toFixed(2)}
+                </span>
+              </div>
+            </div>
           </div>
+          );
+        })()}
         </DialogContent>
       </Dialog>
 

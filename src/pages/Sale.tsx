@@ -169,19 +169,46 @@ export default function Sale() {
       }
 
       if (rawBills.length > 0) {
-        const formattedBills = rawBills.map((bill: any) => ({
-          ...bill,
-          billId: bill.billNo || bill.billId,
-          date: bill.billDate || bill.date,
-          customerName: (bill.customerId && `${bill.customerId.firstName || ''} ${bill.customerId.lastName || ''}`.trim()) || bill.customerName || "N/A",
-          discount: bill.items && bill.items.length > 0 ? bill.items[0].discountPercent : (bill.totalDiscount !== undefined ? bill.totalDiscount : 0),
-          sgst: bill.totalSGST !== undefined ? bill.totalSGST : bill.sgst,
-          cgst: bill.totalCGST !== undefined ? bill.totalCGST : bill.cgst,
-          totalAmount: bill.netAmount !== undefined ? bill.netAmount : bill.totalAmount,
-          amountAfterDiscount: bill.taxableAmount !== undefined ? bill.taxableAmount : bill.amountAfterDiscount,
-          paymentStatus: bill.paymentStatus || bill.status || "UNPAID",
-          agentName: (bill.agentId && `${bill.agentId.firstName || ''} ${bill.agentId.lastName || ''}`.trim()) || bill.agentName || "N/A"
-        }));
+        const formattedBills = rawBills.map((bill: any) => {
+          const gstPercent = bill.items?.[0]?.gstPercent || 0;
+
+          const taxable =
+            bill.taxableAmount !== undefined
+              ? bill.taxableAmount
+              : bill.amountAfterDiscount || 0;
+
+          const cgst = (taxable * gstPercent) / 200;
+          const sgst = (taxable * gstPercent) / 200;
+
+          const finalCgst = Number(cgst.toFixed(2));
+          const finalSgst = Number(sgst.toFixed(2));
+
+          return {
+            ...bill,
+            billId: bill.billNo || bill.billId,
+            date: bill.billDate || bill.date,
+            customerName:
+              (bill.customerId &&
+                `${bill.customerId.firstName || ""} ${
+                  bill.customerId.lastName || ""
+                }`.trim()) ||
+              bill.customerName ||
+              "N/A",
+            discount: bill.items?.[0]?.discountPercent || 0,
+            amountAfterDiscount: taxable,
+            cgst: finalCgst,
+            sgst: finalSgst,
+            totalAmount: Number((taxable + finalCgst + finalSgst).toFixed(2)),
+            paymentStatus: bill.paymentStatus || bill.status || "UNPAID",
+            agentName:
+              (bill.agentId &&
+                `${bill.agentId.firstName || ""} ${
+                  bill.agentId.lastName || ""
+                }`.trim()) ||
+              bill.agentName ||
+              "N/A",
+          };
+        });
         const sortedBills = formattedBills.sort((a: any, b: any) => new Date(b.date || b.billDate).getTime() - new Date(a.date || a.billDate).getTime());
         setAllBills(sortedBills);
         setBills(sortedBills);
@@ -783,7 +810,7 @@ export default function Sale() {
                               <TooltipContent>
                                 <p>Delete</p>
                               </TooltipContent>
-                            </Tooltip>
+                            </Tooltip>   
                           </TooltipProvider>
                         </div>
                       );

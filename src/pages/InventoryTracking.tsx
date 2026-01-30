@@ -588,7 +588,7 @@ export default function InventoryTracking() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>Shows thresholds only for products currently in low stock.</p>
+                  <p>View thresholds for all products.</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -1285,12 +1285,12 @@ export default function InventoryTracking() {
 
       {/* View All Thresholds Dialog */}
       <Dialog open={viewThresholdsDialogOpen} onOpenChange={setViewThresholdsDialogOpen}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-4xl max-h-[80vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>All Product Thresholds</DialogTitle>
             <DialogDescription>View and print all product low stock and max stock thresholds</DialogDescription>
           </DialogHeader>
-          <div className="space-y-4">
+          <div id="threshold-print-area" className="space-y-4 overflow-y-auto">
             <table className="w-full border-collapse border border-gray-300">
               <thead>
                 <tr className="bg-gray-100">
@@ -1302,7 +1302,7 @@ export default function InventoryTracking() {
                 </tr>
               </thead>
               <tbody>
-                {lowStockProducts.map((product: any) => (
+                {products.map((product: any) => (
                   <tr key={product._id}>
                     <td className="border border-gray-300 p-2">{product.productName}</td>
                     <td className="border border-gray-300 p-2">{product.brandName}</td>
@@ -1315,7 +1315,27 @@ export default function InventoryTracking() {
             </table>
           </div>
           <DialogFooter>
-            <Button style={{backgroundColor: "#E98C81", color: "#fff"}} onClick={() => window.print()}>
+            <Button style={{backgroundColor: "#E98C81", color: "#fff"}} onClick={() => {
+              const printContent = document.getElementById('threshold-print-area');
+              if (printContent) {
+                const width = 1000;
+                const height = 800;
+                const left = (screen.width / 2) - (width / 2);
+                const top = (screen.height / 2) - (height / 2);
+                const printWindow = window.open('', '', `height=${height},width=${width},top=${top},left=${left}`);
+                printWindow?.document.write('<html><head><title>Product Thresholds</title>');
+                printWindow?.document.write('<style>body{font-family:sans-serif;} table{width:100%; border-collapse:collapse;} th,td{border:1px solid #ddd; padding:8px; text-align:left;} tr:nth-child(even){background-color:#f2f2f2;} th{background-color:#E98C81; color:white;}</style>');
+                printWindow?.document.write('</head><body>');
+                printWindow?.document.write(printContent.innerHTML);
+                printWindow?.document.write('</body></html>');
+                printWindow?.document.close();
+                printWindow?.focus();
+                setTimeout(() => {
+                  printWindow?.print();
+                  printWindow?.close();
+                }, 250);
+              }
+            }}>
               Print List
             </Button>
             <Button style={{backgroundColor: "#E98C81", color: "#fff"}} onClick={() => setViewThresholdsDialogOpen(false)}>

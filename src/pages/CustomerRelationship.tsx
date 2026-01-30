@@ -97,18 +97,7 @@ export default function CustomerRelationship() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [dateRange, setDateRange] = useState({ start: "", end: "" });
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
-  const [ratingThresholds, setRatingThresholds] = useState({
-    star1Min: 0,
-    star1Max: 0,
-    star2Min: 0,
-    star2Max: 0,
-    star3Min: 0,
-    star3Max: 0,
-    star4Min: 0,
-    star4Max: 0,
-    star5Min: 0,
-    star5Max: 0,
-  });
+  const [ratingThresholds, setRatingThresholds] = useState<any | null>(null);
   const [ratingsLoaded, setRatingsLoaded] = useState(false);
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [tempThresholds, setTempThresholds] = useState<any>({
@@ -705,19 +694,25 @@ export default function CustomerRelationship() {
                     <td className="px-4 sm:px-6 py-3">
                       <div className="flex flex-col">
                         <span className="font-medium">{customer.name}</span>
-                        <div className="flex items-center mt-1 space-x-0.5">
-                          {Array.from({ length: 5 }).map((_, i) => (
-                            <Star
-                              key={i}
-                              className={cn(
-                                "w-3 h-3",
-                                i < Math.round(customer.rating || 0)
-                                  ? "text-yellow-400 fill-yellow-400"
-                                  : "text-gray-300",
-                              )}
-                            />
-                          ))}
-                        </div>
+                        {customer.rating === null ? (
+                          <div className="text-xs text-gray-400 mt-1 italic">
+                            Rating N/A
+                          </div>
+                        ) : (
+                          <div className="flex items-center mt-1 space-x-0.5">
+                            {Array.from({ length: 5 }).map((_, i) => (
+                              <Star
+                                key={i}
+                                className={cn(
+                                  "w-3 h-3",
+                                  i < Math.round(customer.rating || 0)
+                                    ? "text-yellow-400 fill-yellow-400"
+                                    : "text-gray-300",
+                                )}
+                              />
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 sm:px-6 py-3">{customer.phone}</td>
