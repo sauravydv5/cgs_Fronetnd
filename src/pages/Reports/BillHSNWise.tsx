@@ -1,4 +1,4 @@
-npmimport { AdminLayout } from "@/components/AdminLayout";
+import { AdminLayout } from "@/components/AdminLayout";
 import { Button } from "@/components/ui/button";
 import { Download, Search, Calendar, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
@@ -253,16 +253,16 @@ export default function BillHSNWise() {
   const renderCell = (row: BillItem & { sno: number }, columnId: string) => {
     switch (columnId) {
       case "sno": return <td className="px-4 py-4 text-sm text-gray-700">{row.sno}</td>;
-      case "billDate": return <td className="px-4 py-4 text-sm text-gray-700">{new Date(row.billDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>;
+      case "billDate": return <td className="px-4 py-4 text-sm text-gray-700">{new Date(row.billDate).toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric'})}</td>;
       case "billNumber": return <td className="px-4 py-4 text-sm text-gray-700">{row.billNumber}</td>;
       case "itemName": return <td className="px-4 py-4 text-sm text-gray-700">{row.itemName}</td>;
       case "hsnCode": return <td className="px-4 py-4 text-sm text-gray-700">{row.hsnCode || "N/A"}</td>;
       case "gstRate": return <td className="px-4 py-4 text-sm text-gray-700">{row.gstPercent ? `${row.gstPercent}%` : "N/A"}</td>;
-      case "sgst": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.sgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
-      case "cgst": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.cgst.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
+      case "sgst": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.sgst.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}</td>;
+      case "cgst": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.cgst.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}</td>;
       case "qty": return <td className="px-4 py-4 text-sm text-gray-700">{row.qty}</td>;
-      case "totalAmt": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.total.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
-      case "taxableAmt": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>;
+      case "totalAmt": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.total.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}</td>;
+      case "taxableAmt": return <td className="px-4 py-4 text-sm text-gray-700">₹{row.taxableAmount.toLocaleString('en-IN', { minimumFractionDigits:2, maximumFractionDigits:2 })}</td>;
       default: return null;
     }
   };
@@ -428,10 +428,11 @@ export default function BillHSNWise() {
                         variant={currentPage === pageNum ? "default" : "outline"}
                         size="sm"
                         onClick={() => setCurrentPage(pageNum)}
-                        className={`h-8 w-8 p-0 ${currentPage === pageNum
+                        className={`h-8 w-8 p-0 ${
+                          currentPage === pageNum
                             ? "bg-[#E98C81] hover:bg-[#d87a6f] text-white border-none"
                             : ""
-                          }`}
+                        }`}
                       >
                         {pageNum}
                       </Button>
