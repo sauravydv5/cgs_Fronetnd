@@ -15,8 +15,8 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Pencil, Trash2, FileClock, GripVertical, Search, CircleUser, User, CalendarDays, BadgeIndianRupee, Hash, Percent } from "lucide-react";
-import { getAllNewBills, updateBillPaymentStatus, generateBill } from "@/adminApi/billApi";
-import { getAllSaleReturns, updateReturnStatus } from "@/adminApi/saleReturnApi";
+import { getAllNewBills, updateBillPaymentStatus, generateBill, deleteBill } from "@/adminApi/billApi";
+import { getAllSaleReturns, updateReturnStatus, deleteSaleReturn } from "@/adminApi/saleReturnApi";
 import { format } from "date-fns";
 import {
   Select,
@@ -54,6 +54,7 @@ const defaultColumns = [
   { id: "date", label: "Date" },
   { id: "total", label: "Total Amount" },
   { id: "status", label: "Status" },
+  { id: "actions", label: "Actions" },
 ];
 
 const SortableHeaderCell = ({ column }: { column: any }) => {
@@ -87,7 +88,7 @@ const SortableHeaderCell = ({ column }: { column: any }) => {
   );
 };
 
-const SortableRow = ({ bill, columns, onStatusChange, onClick, onViewBill }: { bill: any; columns: any[]; onStatusChange: (id: string, status: string) => void; onClick: (bill: any) => void; onViewBill: (bill: any) => void }) => {
+const SortableRow = ({ bill, columns, onStatusChange, onClick, onViewBill, onDelete }: { bill: any; columns: any[]; onStatusChange: (id: string, status: string) => void; onClick: (bill: any) => void; onViewBill: (bill: any) => void; onDelete: (bill: any) => void }) => {
   const {
     attributes,
     listeners,
@@ -172,6 +173,23 @@ const SortableRow = ({ bill, columns, onStatusChange, onClick, onViewBill }: { b
             </TableCell>
           );
         }
+        if (col.id === "actions") {
+          return (
+            <TableCell key={col.id} className="text-center">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(bill);
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </TableCell>
+          );
+        }
         return (
           <TableCell key={col.id} className={`text-center ${col.id === "billNo" ? "font-medium" : ""}`}>
             {bill[col.id]}
@@ -222,12 +240,16 @@ function BillDrafts() {
           billData = billResponse.bills;
         }
 
-        const formattedBills = billData.map((bill: any) => ({
+        const draftAndUnpaidBills = billData.filter(
+          (bill: any) => bill.paymentStatus !== "Paid"
+        );
+
+        const formattedBills = draftAndUnpaidBills.map((bill: any) => ({
           id: bill._id, // Unique ID for DnD
           billNo: bill.billNo || "N/A",
           customer: bill.customerName || bill.customerId?.firstName || "Unknown",
           date: bill.createdAt ? format(new Date(bill.createdAt), "dd MMM yyyy") : "N/A",
-          total: `₹${bill.netAmount || bill.totalAmount || bill.grandTotal || 0}`,
+          total: `₹${Number(bill.netAmount || bill.totalAmount || bill.grandTotal || 0).toFixed(2)}`,
           status: bill.paymentStatus || "Draft",
           type: 'SL',
           customerId: bill.customerId?._id || bill.customerId,
@@ -256,12 +278,13 @@ function BillDrafts() {
           id: `return-${ret._id}`,
           billNo: ret.returnId || ret._id.slice(-6).toUpperCase(),
           customer: ret.customerName || ret.customerId?.firstName || "Unknown",
+          customerName: ret.customerName || ret.customerId?.firstName || "Unknown",
           date: ret.createdAt ? format(new Date(ret.createdAt), "dd MMM yyyy") : "N/A",
-          total: `₹${ret.refundAmount || 0}`,
+          total: `₹${Number(ret.refundAmount || ret.totalAmount || 0).toFixed(2)}`,
           status: ret.status || "PENDING",
           type: 'SR',
           items: ret.items || [],
-          grandTotal: ret.refundAmount || 0,
+          grandTotal: ret.refundAmount || ret.totalAmount || 0,
           customerId: ret.customerId?._id || ret.customerId,
         }));
 
@@ -335,13 +358,18 @@ function BillDrafts() {
       if (itemToUpdate?.type === 'SR') {
         // It's a sale return, remove prefix for API call
         await updateReturnStatus(billId.replace('return-', ''), status);
+        setBills((prevBills) => prevBills.map((bill) => (bill.id === billId ? { ...bill, status: status } : bill)));
       } else {
         // It's a bill
         await updateBillPaymentStatus(billId, status);
+        if (status === "Paid") {
+          setBills((prevBills) => prevBills.filter((bill) => bill.id !== billId));
+        } else {
+          setBills((prevBills) => prevBills.map((bill) => (bill.id === billId ? { ...bill, status: status } : bill)));
+        }
       }
 
       toast.success("Payment status updated");
-      setBills((prevBills) => prevBills.map((bill) => (bill.id === billId ? { ...bill, status: status } : bill)));
 
     } catch (error) {
       console.error("Failed to update status", error);
@@ -377,6 +405,23 @@ function BillDrafts() {
     } catch (error: any) {
       console.error("Error generating bill:", error);
       toast.error("Failed to generate bill.");
+    }
+  };
+
+  const handleDelete = async (bill: any) => {
+    if (!window.confirm("Are you sure you want to delete this draft?")) return;
+
+    try {
+      if (bill.type === 'SR') {
+        await deleteSaleReturn(bill.id.replace('return-', ''));
+      } else {
+        await deleteBill(bill.id);
+      }
+      setBills((prev) => prev.filter((b) => b.id !== bill.id));
+      toast.success("Draft deleted successfully");
+    } catch (error) {
+      console.error("Failed to delete draft", error);
+      toast.error("Failed to delete draft");
     }
   };
 
@@ -468,6 +513,7 @@ function BillDrafts() {
                         onStatusChange={initiatePaymentStatusChange} 
                         onClick={setSelectedBill} 
                         onViewBill={handleViewGeneratedBill}
+                        onDelete={handleDelete}
                       />
                     ))
                   ) : (
@@ -476,7 +522,7 @@ function BillDrafts() {
                         colSpan={7}
                         className="text-center py-10 text-muted-foreground"
                       >
-                        No draft bills found
+                        No draft bills found !
                       </TableCell>
                     </TableRow>
                   )}
@@ -622,12 +668,12 @@ function BillDrafts() {
                           selectedBill.items.map((item: any, index: number) => (
                             <tr key={index} className="hover:bg-gray-50/50">
                               <td className="px-4 py-2">
-                                <p className="font-medium text-gray-800">{item.itemName || item.productName || "N/A"}</p>
-                                <p className="text-xs text-gray-500">{item.itemCode || ""}</p>
+                                <p className="font-medium text-gray-800">{item.itemName || item.productName || item.productId?.productName || "N/A"}</p>
+                                <p className="text-xs text-gray-500">{item.itemCode || item.productId?.itemCode || ""}</p>
                               </td>
                               <td className="px-4 py-2 text-center">{item.qty}</td>
-                              <td className="px-4 py-2 text-right">₹{item.rate || item.mrp || 0}</td>
-                              <td className="px-4 py-2 text-right font-medium">₹{item.total || item.netAmount || 0}</td>
+                              <td className="px-4 py-2 text-right">₹{Number(item.rate || item.mrp || 0).toFixed(2)}</td>
+                              <td className="px-4 py-2 text-right font-medium">₹{Number(item.total || item.netAmount || item.finalAmount || 0).toFixed(2)}</td>
                             </tr>
                           ))
                         ) : (

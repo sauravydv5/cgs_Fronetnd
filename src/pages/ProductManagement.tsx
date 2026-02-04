@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { AdminLayout } from "@/components/AdminLayout";
-import BarcodeScanner from "react-qr-barcode-scanner";
+import { useZxing } from "react-zxing";
 import { parse } from "papaparse";
 import Barcode from "react-barcode";
 import {
@@ -68,7 +68,7 @@ const initialColumns = [
   { id: "code", label: "Item Code" },
   { id: "brand", label: "Brand Name" },
   { id: "category", label: "Category" },
-  { id: "subcategory", label: "Sub Category" },
+  { id: "subcategory", label: "Sub Category" }, 
   { id: "thumbnail", label: "Thumbnail" },
   { id: "name", label: "Name" },
   { id: "quantity", label: "Quantity" },
@@ -103,6 +103,20 @@ const SortableHeader = ({
   );
 };
 
+const BarcodeScannerWrapper = ({ onUpdate, onError, facingMode }: { onUpdate: (err: any, result: any) => void, onError: (err: any) => void, facingMode?: "environment" | "user" }) => {
+  const { ref } = useZxing({
+    onDecodeResult(result) {
+      onUpdate(null, { text: result.getText() });
+    },
+    onError(error) {
+      if (onError) onError(error);
+    },
+    constraints: { video: { facingMode: facingMode || "environment" } }
+  });
+
+  return <video ref={ref} style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
+};
+
 export default function ProductManagement() {
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
@@ -129,6 +143,8 @@ export default function ProductManagement() {
   const [barcodeProduct, setBarcodeProduct] = useState<any>(null);
   const [bulkUploadDialogOpen, setBulkUploadDialogOpen] = useState(false);
   const [scanBarcodeDialogOpen, setScanBarcodeDialogOpen] = useState(false);
+  const [cameraFacingMode, setCameraFacingMode] = useState<"environment" | "user">("environment");
+  const [cameraError, setCameraError] = useState<string | null>(null);
   // const [scanBarcodeDialogOpen, setScanBarcodeDialogOpen] = useState(false);
   const [lowStockThreshold, setLowStockThreshold] = useState(10);
   const barcodeRef = useRef<HTMLDivElement>(null);
@@ -1126,7 +1142,11 @@ export default function ProductManagement() {
           <Button
             className="rounded-full text-white hover:opacity-90 border-0 font-bold"
             style={{ background: "linear-gradient(180deg, #F1D6CF 0%, #EDA093 100%)" }}
-            onClick={() => setScanBarcodeDialogOpen(true)}
+            onClick={() => {
+              setScanBarcodeDialogOpen(true);
+              setCameraError(null);
+              setCameraFacingMode("environment");
+            }}
           >
             <BarcodeIcon className="w-4 h-4 mr-2" />
             Scan Barcode
@@ -1814,15 +1834,34 @@ export default function ProductManagement() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="py-4 h-[300px] sm:h-[400px] w-full bg-black rounded-md overflow-hidden relative flex items-center justify-center">
-              <p className="text-white/50 text-sm absolute">Camera loading... Ensure permission is granted.</p>
-              {scanBarcodeDialogOpen && (
-                <BarcodeScanner
-                  onUpdate={handleBarcodeScan}
-                  onError={(err) => console.error("Camera access error: " + err)}
-                  width="100%"
-                  height="100%"
-                  facingMode="environment"
-                />
+              {cameraError ? (
+                <div className="text-white text-center p-4">
+                  <p className="text-red-400 mb-2 font-semibold">Camera Error</p>
+                  <p className="text-sm text-white/80">{cameraError}</p>
+                </div>
+              ) : (
+                <>
+                  <p className="text-white/50 text-sm absolute">Camera loading... Ensure permission is granted.</p>
+                  {scanBarcodeDialogOpen && (
+                    <BarcodeScannerWrapper
+                      onUpdate={handleBarcodeScan}
+                      onError={(err) => {
+                        console.error("Camera access error:", err);
+                        // @ts-ignore
+                        const errMsg = err?.message || err?.toString() || "";
+                        if (errMsg.includes("not found") || errMsg.includes("NotFoundError") || errMsg.includes("OverconstrainedError")) {
+                          if (cameraFacingMode === "environment") {
+                            setCameraFacingMode("user");
+                            toast.info("Switching to front camera/webcam...");
+                            return;
+                          }
+                        }
+                        setCameraError(errMsg || "Camera not available");
+                      }}
+                      facingMode={cameraFacingMode}
+                    />
+                  )}
+                </>
               )}
             </div>
 

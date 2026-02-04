@@ -31,7 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Search, Edit, Trash2, Barcode, RotateCcw } from "lucide-react";
-import React, { useState, useEffect } from "react"; // React is imported here
+import React, { useState, useEffect } from "react";
 import { useNavigate, useSearchParams, useLocation } from "react-router-dom";
 import { DndContext, closestCenter, type DragEndEvent } from "@dnd-kit/core";
 import {
@@ -47,10 +47,11 @@ import {
   getBillsByCustomerId,
   generateBill,
   updateBillPaymentStatus,
-} from "@/adminApi/billApi"; // Assuming the api is in billApi
+} from "@/adminApi/billApi";
 import { getAllProducts } from "@/adminApi/productApi";
 import { addSaleReturn } from "@/adminApi/saleReturnApi";
 import { toast } from "sonner";
+import { useZxing } from "react-zxing";
 
 const updateBill = async ({ id, data }: { id: string; data: any }) => {
   return await adminInstance.put(`/bills/update/${id}`, data);
@@ -58,6 +59,53 @@ const updateBill = async ({ id, data }: { id: string; data: any }) => {
 
 const deleteBill = async (id: string) => {
   return await adminInstance.delete(`/bills/delete/${id}`);
+};
+
+// Helper to calculate row amounts (net, tax, total)
+const calculateRowAmount = ({
+  mrp = 0,
+  qty = 0,
+  cd = 0,
+  tax = 0,
+}: {
+  mrp?: number | string;
+  qty?: number | string;
+  cd?: number | string;
+  tax?: number | string;
+}) => {
+  const m = Number(mrp) || 0;
+  const q = Number(qty) || 0;
+  const discountPercent = Number(cd) || 0;
+  const gstPercent = Number(tax) || 0;
+
+  const gross = m * q;
+  const discountAmount = (gross * discountPercent) / 100;
+  const taxable = gross - discountAmount;
+
+  const cgst = (taxable * gstPercent) / 200;
+  const sgst = (taxable * gstPercent) / 200;
+
+  const total = taxable + cgst + sgst;
+
+  return {
+    netAmount: taxable.toFixed(2),
+    taxAmount: (cgst + sgst).toFixed(2),
+    total: total.toFixed(2),
+  };
+};
+
+const BarcodeScannerWrapper = ({ onUpdate, onError, facingMode }: { onUpdate: (err: any, result: any) => void, onError: (err: any) => void, facingMode?: "environment" | "user" }) => {
+  const { ref } = useZxing({
+    onDecodeResult(result) {
+      onUpdate(null, { text: result.getText() });
+    },
+    onError(error) {
+      if (onError) onError(error);
+    },
+    constraints: { video: { facingMode: facingMode || "environment" } }
+  });
+
+  return <video ref={ref} style={{ width: "100%", height: "100%", objectFit: "cover" }} />;
 };
 
 export default function NewBill() {
@@ -74,9 +122,7 @@ export default function NewBill() {
   const navigate = useNavigate();
   const [isSaving, setIsSaving] = useState(false);
   const [openPopoverIndex, setOpenPopoverIndex] = useState<number | null>(null);
-  const [openNamePopoverIndex, setOpenNamePopoverIndex] = useState<
-    number | null
-  >(null);
+  const [openNamePopoverIndex, setOpenNamePopoverIndex] = useState<number | null>(null);
   const [rows, setRows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saleItems, setSaleItems] = useState<any[]>([]);
@@ -93,6 +139,12 @@ export default function NewBill() {
   } | null>(null);
   const [exitConfirmationOpen, setExitConfirmationOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [scanBarcodeDialogOpen, setScanBarcodeDialogOpen] = useState(false);
+  
+  // New states for camera handling 
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [manualBarcodeInput, setManualBarcodeInput] = useState("");
+  const [cameraFacingMode, setCameraFacingMode] = useState<"environment" | "user">("environment");
 
   const initialColumns = [
     { id: "sno", label: "SNO." },
@@ -127,6 +179,71 @@ export default function NewBill() {
     return initialColumns;
   });
 
+  // Handle manual barcode input submission
+  const handleManualBarcodeSubmit = () => {
+    if (manualBarcodeInput.trim()) {
+      const scannedCode = manualBarcodeInput.trim();
+      const product = products.find(
+        (p) => p.itemCode && p.itemCode.toLowerCase() === scannedCode.toLowerCase()
+      );
+
+      if (product) {
+        setSaleItems((prev) => {
+          const updated = [...prev];
+          let targetIndex = updated.findIndex((r) => !r.itemCode);
+
+          if (targetIndex === -1) {
+            targetIndex = updated.length;
+            updated.push({
+              id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              sno: `${String(updated.length + 1).padStart(2, "0")}.`,
+            });
+          }
+
+          const row = updated[targetIndex];
+          const mrp = Number(product.mrp) || 0;
+          const qty = 1;
+          const cd = Number(product.discount) || 0;
+          const tax = Number(product.gst) || 0;
+          const calc = calculateRowAmount({ mrp, qty, cd, tax });
+
+          updated[targetIndex] = {
+            ...row,
+            productId: product._id,
+            itemCode: product.itemCode,
+            itemName: product.productName,
+            companyName: product.brandName,
+            hsnCode: product.hsnCode,
+            packing: product.packSize,
+            mrp,
+            rate: mrp,
+            qty,
+            cd,
+            tax,
+            netAmount: calc.netAmount,
+            lot: "N/A",
+          };
+
+          if (targetIndex === updated.length - 1) {
+            updated.push({
+              id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              sno: `${String(updated.length + 1).padStart(2, "0")}.`,
+            });
+          }
+          return updated;
+        });
+        
+        toast.success(`Added: ${product.productName}`);
+        setManualBarcodeInput("");
+        setScanBarcodeDialogOpen(false);
+      } else {
+        toast.error("Product not found with this barcode");
+      }
+    } else {
+      toast.error("Please enter a barcode");
+    }
+  };
+
   const fetchBills = React.useCallback(async () => {
     if (!customerId) {
       setLoading(false);
@@ -134,7 +251,6 @@ export default function NewBill() {
     }
     try {
       setLoading(true);
-      // setRows([]);
 
       const response = await getBillsByCustomerId(customerId);
       if (
@@ -169,7 +285,7 @@ export default function NewBill() {
             sno: `${String(sno).padStart(2, "0")}.`,
             lot: item.batch || "N/A",
             cd: item.discountPercent,
-            netAmount: item.taxableAmount, // ✅ correct net
+            netAmount: item.taxableAmount,
             tax: item.gstPercent,
           };
         });
@@ -178,7 +294,6 @@ export default function NewBill() {
         setRows([]);
       }
     } catch (error: any) {
-      // Do not show an error if it's a 404, as it's expected for new customers.
       if (error.response?.status === 404) {
         setRows([]);
       } else {
@@ -195,10 +310,8 @@ export default function NewBill() {
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        // Request a large limit so the UI can show all product item codes (allow user to scroll)
         const response = await getAllProducts({ limit: 10000 });
 
-        // Support multiple response shapes from API (rows, products, data array, etc.)
         let productData: any[] = [];
 
         if (
@@ -234,7 +347,7 @@ export default function NewBill() {
       }
     };
     fetchProducts();
-    // If we are creating a new bill, open the modal and prepare an empty row.
+
     if (location.state?.customerName) {
       setCustomerInfo({
         name: location.state.customerName,
@@ -250,6 +363,7 @@ export default function NewBill() {
 
     fetchBills();
   }, [customerId, location.state, fetchBills, navigate]);
+
   useEffect(() => {
     localStorage.setItem(
       "billDetailsTableColumnOrder_v2",
@@ -258,7 +372,7 @@ export default function NewBill() {
   }, [columns]);
 
   useEffect(() => {
-    // When a product popover is open, redirect page wheel scrolling to the popover
+    // Redirect wheel scrolling to popover when open
     const activeIndex =
       openPopoverIndex !== null ? openPopoverIndex : openNamePopoverIndex;
     if (activeIndex === null) return;
@@ -274,12 +388,10 @@ export default function NewBill() {
       const atBottom =
         Math.abs(pop.scrollHeight - pop.clientHeight - pop.scrollTop) <= 1;
 
-      // If popover cannot scroll further in the direction, allow the page to scroll
       if ((delta < 0 && atTop) || (delta > 0 && atBottom)) {
         return;
       }
 
-      // Otherwise prevent page scroll and scroll the popover
       e.preventDefault();
       pop.scrollTop += delta;
     };
@@ -287,6 +399,147 @@ export default function NewBill() {
     window.addEventListener("wheel", onWheel, { passive: false });
     return () => window.removeEventListener("wheel", onWheel as EventListener);
   }, [openPopoverIndex, openNamePopoverIndex]);
+
+  // Barcode Scanner Listener for keyboard input
+  useEffect(() => {
+    if (!openAddProductModal) return;
+
+    let buffer = "";
+    let lastKeyTime = Date.now();
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const currentTime = Date.now();
+      // Reset buffer if typing is too slow (likely manual input)
+      if (currentTime - lastKeyTime > 100) {
+        buffer = "";
+      }
+      lastKeyTime = currentTime;
+
+      if (e.key === "Enter") {
+        if (buffer.length > 0) {
+          const scannedCode = buffer.trim();
+          const product = products.find(
+            (p) => p.itemCode && p.itemCode.toLowerCase() === scannedCode.toLowerCase()
+          );
+
+          if (product) {
+            e.preventDefault();
+            
+            setSaleItems((prev) => {
+              const updated = [...prev];
+              let targetIndex = updated.findIndex((r) => !r.itemCode);
+
+              if (targetIndex === -1) {
+                targetIndex = updated.length;
+                updated.push({
+                  id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  sno: `${String(updated.length + 1).padStart(2, "0")}.`,
+                });
+              }
+
+              const row = updated[targetIndex];
+              const mrp = Number(product.mrp) || 0;
+              const qty = 1;
+              const cd = Number(product.discount) || 0;
+              const tax = Number(product.gst) || 0;
+              const calc = calculateRowAmount({ mrp, qty, cd, tax });
+
+              updated[targetIndex] = {
+                ...row,
+                productId: product._id,
+                itemCode: product.itemCode,
+                itemName: product.productName,
+                companyName: product.brandName,
+                hsnCode: product.hsnCode,
+                packing: product.packSize,
+                mrp,
+                rate: mrp,
+                qty,
+                cd,
+                tax,
+                netAmount: calc.netAmount,
+                lot: "N/A",
+              };
+
+              if (targetIndex === updated.length - 1) {
+                updated.push({
+                  id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                  sno: `${String(updated.length + 1).padStart(2, "0")}.`,
+                });
+              }
+              return updated;
+            });
+            toast.success(`Added: ${product.productName}`);
+          }
+          buffer = "";
+        }
+      } else if (e.key.length === 1) {
+        buffer += e.key;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [openAddProductModal, products]);
+
+  const handleBarcodeScan = (err: any, result: any) => {
+    if (result) {
+      const scannedCode = result.text;
+      const product = products.find(
+        (p) => p.itemCode && p.itemCode.toLowerCase() === scannedCode.toLowerCase()
+      );
+
+      if (product) {
+        setScanBarcodeDialogOpen(false);
+        
+        setSaleItems((prev) => {
+          const updated = [...prev];
+          let targetIndex = updated.findIndex((r) => !r.itemCode);
+
+          if (targetIndex === -1) {
+            targetIndex = updated.length;
+            updated.push({
+              id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              sno: `${String(updated.length + 1).padStart(2, "0")}.`,
+            });
+          }
+
+          const row = updated[targetIndex];
+          const mrp = Number(product.mrp) || 0;
+          const qty = 1;
+          const cd = Number(product.discount) || 0;
+          const tax = Number(product.gst) || 0;
+          const calc = calculateRowAmount({ mrp, qty, cd, tax });
+
+          updated[targetIndex] = {
+            ...row,
+            productId: product._id,
+            itemCode: product.itemCode,
+            itemName: product.productName,
+            companyName: product.brandName,
+            hsnCode: product.hsnCode,
+            packing: product.packSize,
+            mrp,
+            rate: mrp,
+            qty,
+            cd,
+            tax,
+            netAmount: calc.netAmount,
+            lot: "N/A",
+          };
+
+          if (targetIndex === updated.length - 1) {
+            updated.push({
+              id: `new-item-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+              sno: `${String(updated.length + 1).padStart(2, "0")}.`,
+            });
+          }
+          return updated;
+        });
+        toast.success(`Added: ${product.productName}`);
+      }
+    }
+  };
 
   const SortableHeader = ({
     column,
@@ -341,13 +594,12 @@ export default function NewBill() {
         companyName: row.companyName,
         hsnCode: row.hsnCode,
         packing: row.packing,
-        batch: row.lot === "N/A" ? "" : (row.lot || ""), // Map lot back to batch
+        batch: row.lot === "N/A" ? "" : (row.lot || ""),
         qty: Number(row.qty) || 0,
         rate: Number(row.mrp) || 0,
         mrp: Number(row.mrp) || 0,
         discountPercent: Number(row.cd) || 0,
         gstPercent: Number(row.tax) || 0,
-        // The backend should calculate other fields like taxableAmount, gst, total etc.
       }))
       .filter((item) => item.itemCode && item.qty > 0);
     
@@ -439,7 +691,6 @@ export default function NewBill() {
           billIdForReturn = newBill._id;
         }
       } else if (editingBillId && returnPayloadItems.length > 0) {
-        // If editing and only returns are present, update original bill with empty items
         await updateBill({ id: editingBillId, data: { items: [] } });
       }
 
@@ -483,14 +734,12 @@ export default function NewBill() {
 
   const handleCreateNewBillForCustomer = () => {
     if (!customerId) {
-      // If there's no customer context, go to the customer list to select one.
       toast.info("Please select a customer to create a new bill.");
       navigate("/bills/customers");
       return;
     }
-    // If there is a customer, open the modal to add a new bill for them.
     setEditingBillId(null);
-    setSaleItems([{ id: `new-item-${Date.now()}`, sno: "01." }]); // Start with one fresh row for the new bill
+    setSaleItems([{ id: `new-item-${Date.now()}`, sno: "01." }]);
     setReturnItems([]);
     setOpenAddProductModal(true);
   };
@@ -498,13 +747,12 @@ export default function NewBill() {
   const handleGenerateBill = async () => {
     try {
       const response = await generateBill(customerId);
-      // The API returns a base64 data URL in the 'url' field
       const billDataUrl = response.url;
 
       if (response.success && billDataUrl) {
         toast.success("Bill generated successfully!");
 
-        // Decode base64 to HTML string for srcDoc (allows printing)
+        // Decode base64 to HTML string for srcDoc
         const base64Part = billDataUrl.split(",")[1];
         const binaryString = window.atob(base64Part);
         const bytes = new Uint8Array(binaryString.length);
@@ -515,6 +763,30 @@ export default function NewBill() {
 
         setGeneratedBillHtml(decodedHtml);
         setShowGeneratedBill(true);
+
+        // Automatically mark unpaid bills as Paid
+        const uniqueBillIds = Array.from(new Set(rows.map((r) => r.billId))).filter(Boolean);
+        const billsToUpdate = uniqueBillIds.filter((billId) => {
+          const row = rows.find((r) => r.billId === billId);
+          return row && row.paymentStatus !== "Paid";
+        });
+
+        if (billsToUpdate.length > 0) {
+          try {
+            await Promise.all(billsToUpdate.map((id) => updateBillPaymentStatus(id as string, "Paid")));
+            setRows((prevRows) =>
+              prevRows.map((row) => {
+                if (billsToUpdate.includes(row.billId)) {
+                  return { ...row, paymentStatus: "Paid" };
+                }
+                return row;
+              })
+            );
+            toast.success("Bills marked as Paid.");
+          } catch (err) {
+            console.error("Failed to auto-update bill status:", err);
+          }
+        }
       } else {
         toast.error(
           response.message ||
@@ -532,7 +804,6 @@ export default function NewBill() {
 
   const handleEditBill = (row: any) => {
     const billId = row.billId;
-    // Filter all rows that belong to this bill to populate the modal
     const billItems = rows.filter((r) => r.billId === billId);
 
     const sales: any[] = [];
@@ -551,12 +822,9 @@ export default function NewBill() {
         ...item,
         id: item.uniqueId || `edit-item-${index}`,
         sno: `${String(index + 1).padStart(2, "0")}.`,
-        // Ensure fields map correctly for the modal inputs
         mrp: item.rate || item.mrp,
         cd: item.discountPercent || item.cd,
-        // Ensure productId is present
         productId: pId,
-        // Ensure other fields are present
         itemCode: item.itemCode,
         itemName: item.itemName,
         companyName: item.companyName,
@@ -588,39 +856,6 @@ export default function NewBill() {
     fetchBills();
   };
 
-  // Helper to calculate row amounts (net, tax, total)
-  const calculateRowAmount = ({
-    mrp = 0,
-    qty = 0,
-    cd = 0,
-    tax = 0,
-  }: {
-    mrp?: number | string;
-    qty?: number | string;
-    cd?: number | string;
-    tax?: number | string;
-  }) => {
-    const m = Number(mrp) || 0;
-    const q = Number(qty) || 0;
-    const discountPercent = Number(cd) || 0;
-    const gstPercent = Number(tax) || 0;
-
-    const gross = m * q;
-    const discountAmount = (gross * discountPercent) / 100;
-    const taxable = gross - discountAmount;
-
-    const cgst = (taxable * gstPercent) / 200;
-    const sgst = (taxable * gstPercent) / 200;
-
-    const total = taxable + cgst + sgst;
-
-    return {
-      netAmount: taxable.toFixed(2), // ✅ NET (without GST)
-      taxAmount: (cgst + sgst).toFixed(2),
-      total: total.toFixed(2), // ✅ FINAL PAYABLE
-    };
-  };
-
   const handleProductSelect = (product: any, rowIndex: number) => {
     setSaleItems((prev) => {
       const updated = [...prev];
@@ -628,7 +863,6 @@ export default function NewBill() {
       const mrp = Number(product.mrp) || 0;
       const qty = Number(row.qty) || 1;
       const cd = Number(product.discount) || 0;
-      // Always use the selected product's GST rate to prevent carrying over tax from previous selection
       const tax = Number(product.gst) || 0;
 
       const calc = calculateRowAmount({ mrp, qty, cd, tax });
@@ -636,20 +870,17 @@ export default function NewBill() {
       updated[rowIndex] = {
         ...row,
         productId: product._id,
-
         itemCode: product.itemCode,
         itemName: product.productName,
         companyName: product.brandName,
         hsnCode: product.hsnCode,
         packing: product.packSize,
-
         mrp,
         rate: mrp,
         qty,
         cd,
         tax,
-
-        netAmount: calc.netAmount, // ✅ taxable only
+        netAmount: calc.netAmount,
       };
 
       // Automatically add a new row if the current row is the last one
@@ -687,7 +918,7 @@ export default function NewBill() {
           tax: updatedRow.tax,
         });
 
-        updatedRow.netAmount = calc.netAmount; // ✅ taxable amount only
+        updatedRow.netAmount = calc.netAmount;
       }
 
       newRows[index] = updatedRow;
@@ -757,7 +988,6 @@ export default function NewBill() {
       ]);
       toast.success("Item moved to Return list");
     } else {
-      // Update sale item quantity
       setSaleItems((prev) =>
         prev.map((i) => {
           if (i.id === item.id) {
@@ -768,7 +998,6 @@ export default function NewBill() {
           return i;
         }),
       );
-      // Add new return item
       setReturnItems((prev) => {
         const calc = calculateRowAmount({ ...returnItemData, qty: returnQty });
         return [
@@ -786,16 +1015,13 @@ export default function NewBill() {
   };
 
   const handleUndoReturn = (itemToMoveBack: any) => {
-    // Remove from returnItems
     setReturnItems((prev) => prev.filter((i) => i.id !== itemToMoveBack.id));
 
-    // Check if an item with the same product ID already exists in saleItems
     const existingSaleItemIndex = saleItems.findIndex(
       (i) => i.productId === itemToMoveBack.productId,
     );
 
     if (existingSaleItemIndex > -1) {
-      // If it exists, update its quantity
       setSaleItems((prev) =>
         prev.map((item, index) => {
           if (index === existingSaleItemIndex) {
@@ -808,7 +1034,6 @@ export default function NewBill() {
         }),
       );
     } else {
-      // If it does not exist, add it back
       setSaleItems((prev) => [...prev, itemToMoveBack]);
     }
 
@@ -891,7 +1116,7 @@ export default function NewBill() {
         }
       `}</style>
       <div className="p-4 sm:p-6 bg-white min-h-screen text-[#3E3E3E] flex flex-col justify-between overflow-hidden relative">
-        {/* === Top Section === */}
+        {/* Top Section */}
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
@@ -926,7 +1151,7 @@ export default function NewBill() {
             </div>
           </div>
 
-          {/* === Table === */}
+          {/* Table */}
           <div className="bg-white p-3 rounded-xl shadow-sm overflow-x-auto border border-[#F3D9D9] min-h-[300px]">
             {loading ? (
               <div className="flex items-center justify-center h-full text-gray-500">
@@ -990,7 +1215,6 @@ export default function NewBill() {
                             </SelectTrigger>
                             <SelectContent>
                               <SelectItem value="Paid">Paid</SelectItem>
-                              {/* <SelectItem value="Pending">Pending</SelectItem> */}
                               <SelectItem value="Unpaid">Unpaid</SelectItem>
                               <SelectItem value="Draft">Draft</SelectItem>
                             </SelectContent>
@@ -1073,7 +1297,7 @@ export default function NewBill() {
           </div>
         </div>
 
-        {/* === Bottom Buttons (Fixed) === */}
+        {/* Bottom Buttons (Fixed) */}
         <div className="fixed bottom-6 right-8 flex flex-col sm:flex-row gap-4 z-50">
           <Button
             onClick={() => setOpenPreview(true)}
@@ -1090,7 +1314,7 @@ export default function NewBill() {
         </div>
       </div>
 
-      {/* === Generated Bill Modal === */}
+      {/* Generated Bill Modal */}
       <Dialog open={showGeneratedBill} onOpenChange={setShowGeneratedBill}>
         <DialogContent className="max-w-screen-lg w-[90vw] h-[90vh] flex flex-col p-2">
           <DialogHeader className="p-4 flex-row flex justify-between items-center">
@@ -1118,17 +1342,12 @@ export default function NewBill() {
         </DialogContent>
       </Dialog>
 
-      {/* === Add Product Modal (Editable) === */}
+      {/* Add Product Modal (Editable) */}
       <Dialog open={openAddProductModal} onOpenChange={setOpenAddProductModal}>
         <DialogContent className="max-w-screen-2xl w-[95vw] max-h-[95vh] bg-white rounded-3xl p-5 sm:p-10 shadow-lg border-none overflow-y-auto">
           {(() => {
             const sl = calculateTotals(saleItems);
             const sr = calculateTotals(returnItems);
-            // The net payable amount is the total of items being sold minus the total of items being returned.
-            // The user's issue was that when an item was moved from sale to return in a *new* bill,
-            // the sale total decreased, and the return total increased, leading to an incorrect
-            // final calculation (e.g., Total A - Total B instead of just Total A).
-            // By calculating a gross total first, we can show a more logical summary.
             const grossTotal = sl.total + sr.total;
             const netPayable = grossTotal - sr.total;
             return (
@@ -1376,6 +1595,7 @@ export default function NewBill() {
                       <RotateCcw
                         size={16}
                         className="text-blue-600 cursor-pointer hover:scale-110 transition"
+                        // @ts-ignore
                         title="Return Item"
                         onClick={() => handleReturnItem(r)}
                       />
@@ -1424,6 +1644,7 @@ export default function NewBill() {
                           <RotateCcw
                             size={16}
                             className="text-green-600 cursor-pointer hover:scale-110 transition"
+                            // @ts-ignore
                             title="Move back to Sale"
                             onClick={() => handleUndoReturn(r)}
                           />
@@ -1441,6 +1662,18 @@ export default function NewBill() {
             )}
 
             <div className="flex justify-center items-center mt-8 gap-4">
+              <Button
+                onClick={() => {
+                  setScanBarcodeDialogOpen(true);
+                  setCameraError(null);
+                  setCameraFacingMode("environment");
+                  setManualBarcodeInput("");
+                }}
+                className="bg-[#E98C81] hover:bg-[#df7c72] text-white rounded-full px-6 py-2 font-medium shadow-sm flex items-center gap-2"
+              >
+                <Barcode size={18} />
+                Scan Barcode
+              </Button>
               <Button
                 onClick={handleAddSaleRow}
                 className="bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-full px-6 py-2 font-medium shadow-sm"
@@ -1518,7 +1751,7 @@ export default function NewBill() {
         </DialogContent>
       </Dialog>
 
-      {/* === Preview Modal === */}
+      {/* Preview Modal */}
       <Dialog open={openPreview} onOpenChange={setOpenPreview}>
         <DialogContent className="max-w-screen-2xl w-[95vw] bg-white rounded-3xl p-5 sm:p-10 shadow-lg border-none overflow-hidden">
           <div className="overflow-x-auto">
@@ -1600,7 +1833,109 @@ export default function NewBill() {
         </DialogContent>
       </Dialog>
 
-      {/* === Product Details Modal === */}
+      {/* Scan Barcode Dialog */}
+      <Dialog open={scanBarcodeDialogOpen} onOpenChange={setScanBarcodeDialogOpen}>
+        <DialogContent className="sm:max-w-[600px]">
+          <DialogHeader>
+            <DialogTitle>Scan Product Barcode</DialogTitle>
+            <DialogDescription>
+              Point your camera at a barcode or enter the code manually below.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Manual Input - Priority for better UX */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">
+                Enter Barcode Manually
+              </label>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Type barcode number here"
+                  value={manualBarcodeInput}
+                  onChange={(e) => setManualBarcodeInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      handleManualBarcodeSubmit();
+                    }
+                  }}
+                  className="flex-1"
+                  autoFocus
+                />
+                <Button
+                  onClick={handleManualBarcodeSubmit}
+                  className="bg-[#E98C81] hover:bg-[#df7c72] text-white px-6"
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="h-px bg-gray-200 flex-1" />
+              <span className="text-xs text-gray-500 font-medium">OR USE CAMERA</span>
+              <div className="h-px bg-gray-200 flex-1" />
+            </div>
+
+            {/* Camera Scanner */}
+            <div className="py-4 h-[300px] sm:h-[400px] w-full bg-black rounded-md overflow-hidden relative flex items-center justify-center">
+              {cameraError ? (
+                <div className="text-white text-center p-6 space-y-3">
+                  <div className="bg-red-500/20 rounded-lg p-4 border border-red-500/30">
+                    <p className="font-semibold mb-2">⚠️ Camera Error</p>
+                    <p className="text-sm text-white/90">{cameraError}</p>
+                  </div>
+                  <p className="text-xs text-white/60">
+                    Please use the manual input above
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="absolute top-2 left-2 right-2 bg-black/50 text-white text-xs p-2 rounded z-10 text-center">
+                    📷 Point camera at barcode
+                  </div>
+                  {scanBarcodeDialogOpen && (
+                    <BarcodeScannerWrapper
+                      onUpdate={handleBarcodeScan}
+                      onError={(err) => {
+                        console.error("Camera error:", err);
+                        // @ts-ignore
+                        const errMsg = err?.message || err?.toString() || "";
+                        if (errMsg.includes("not found") || errMsg.includes("NotFoundError") || errMsg.includes("OverconstrainedError")) {
+                          if (cameraFacingMode === "environment") {
+                            setCameraFacingMode("user");
+                            toast.info("Switching to front camera/webcam...");
+                            return;
+                          }
+                        }
+                        setCameraError(errMsg || "Camera not available");
+                      }}
+                      facingMode={cameraFacingMode}
+                    />
+                  )}
+                </>
+              )}
+            </div>
+
+            {!cameraError && (
+              <p className="text-xs text-center text-gray-500">
+                💡 Tip: Hold the barcode steady in good lighting for best results
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setScanBarcodeDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Product Details Modal */}
       <Dialog open={openProductDetail} onOpenChange={setOpenProductDetail}>
         <DialogContent className="max-w-md w-[85vw] bg-white rounded-xl p-5 shadow-lg border-none max-h-[80vh] overflow-y-auto">
           {selectedProduct && (
@@ -1703,7 +2038,7 @@ export default function NewBill() {
         </DialogContent>
       </Dialog>
 
-      {/* === Payment Status Confirmation Dialog === */}
+      {/* Payment Status Confirmation Dialog */}
       <Dialog
         open={statusConfirmationOpen}
         onOpenChange={setStatusConfirmationOpen}
@@ -1733,7 +2068,7 @@ export default function NewBill() {
         </DialogContent>
       </Dialog>
 
-      {/* === Exit Confirmation Dialog === */}
+      {/* Exit Confirmation Dialog */}
       <Dialog open={exitConfirmationOpen} onOpenChange={setExitConfirmationOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
